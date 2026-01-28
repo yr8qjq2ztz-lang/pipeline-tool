@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 export default function Home() {
   const supabase = supabaseBrowser();
@@ -14,7 +15,8 @@ export default function Home() {
     let unsubscribe: (() => void) | undefined;
 
     try {
-      const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      const { data: sub } = supabase.auth.onAuthStateChange(
+        (event: AuthChangeEvent, session: Session | null) => {
         if (event === "INITIAL_SESSION") {
           setReady(true);
           try {
@@ -24,7 +26,8 @@ export default function Home() {
             setError("Failed to navigate. Please refresh the page.");
           }
         }
-      });
+        }
+      );
 
       unsubscribe = () => sub.subscription.unsubscribe();
     } catch (e) {
