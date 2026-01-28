@@ -8,6 +8,21 @@ type SearchParams = {
   branch?: string; // we'll use branch UUID here
 };
 
+type Branch = { id: string; name: string };
+
+type Opportunity = {
+  id: string;
+  branch_id: string | null;
+  stage: string | null;
+  close_date: string | null;
+  rolling_12m_value: number | null;
+  probability: number | null;
+  next_action_due: string | null;
+  created_at: string | null;
+  accounts?: { id: string; name: string | null }[] | null;
+  branches?: { id: string; name: string | null }[] | null;
+};
+
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -25,7 +40,7 @@ export default async function DashboardPage({
     const params = await searchParams;
     const selectedBranchId = params.branch && params.branch !== "All" ? params.branch : "All";
 
-  const supabase = await supabaseServer();
+    const supabase = await supabaseServer();
 
   // Must be logged in
   const { data: userData } = await supabase.auth.getUser();
@@ -33,11 +48,11 @@ export default async function DashboardPage({
 
   // Try to load branch names if you have a branches table (optional).
   // If not present, we fall back to showing branch UUIDs.
-  let branches: { id: string; name: string }[] = [];
-  const branchesRes = await supabase.from("branches").select("id,name").order("name");
-  if (!branchesRes.error && branchesRes.data) {
-    branches = branchesRes.data as any;
-  }
+    let branches: Branch[] = [];
+    const branchesRes = await supabase.from("branches").select("id,name").order("name");
+    if (!branchesRes.error && branchesRes.data) {
+      branches = branchesRes.data as Branch[];
+    }
 
   // Pull opportunities with account and branch data for consistency with pipeline
   let q = supabase
@@ -53,7 +68,7 @@ export default async function DashboardPage({
     throw new Error(res.error.message);
   }
 
-  const data = res.data ?? [];
+    const data = (res.data ?? []) as Opportunity[];
 
   const now = new Date();
   const in30 = new Date(now);
@@ -86,7 +101,9 @@ export default async function DashboardPage({
   // branch dropdown source:
   // - if branches table exists, use it
   // - else build from distinct IDs in opportunities
-  const branchIdsFromOpps = Array.from(new Set(data.map((r: any) => String(r.branch_id))));
+    const branchIdsFromOpps = Array.from(
+      new Set(data.map((r) => String(r.branch_id ?? "")))
+    ).filter(Boolean);
   const dropdownBranches =
     branches.length > 0
       ? [{ id: "All", name: "All" }, ...branches]
@@ -94,7 +111,7 @@ export default async function DashboardPage({
 
   const branchNameById = new Map(dropdownBranches.map((b) => [b.id, b.name] as const));
 
-  for (const r of data as any[]) {
+    for (const r of data) {
     const stage = String(r.stage ?? "Unstaged");
     const isClosed = CLOSED.has(stage);
 
@@ -145,19 +162,19 @@ export default async function DashboardPage({
   const byStage = Array.from(stageMap.values()).sort((a, b) => b.count - a.count);
 
   // Collect at-risk deals from filtered data
-  const atRiskDeals = data
-    .filter((r: any) => {
+    const atRiskDeals = data
+    .filter((r) => {
       const nextDue = r.next_action_due ? new Date(r.next_action_due) : null;
       const stage = r.stage ?? "";
       return !CLOSED.has(stage) && nextDue && nextDue < now;
     })
     .slice(0, 5) // top 5
-    .map((r: any) => ({
-      accountName: r.accounts?.name ?? "Unknown",
-      stage: r.stage,
-      value: r.rolling_12m_value,
-      probability: r.probability,
-      dueDate: r.next_action_due
+    .map((r) => ({
+      accountName: r.accounts?.[0]?.name ?? "Unknown",
+      stage: r.stage ?? "",
+      value: Number(r.rolling_12m_value ?? 0),
+      probability: Number(r.probability ?? 0),
+      dueDate: r.next_action_due ?? "",
     }));
 
     return (
@@ -187,7 +204,7 @@ export default async function DashboardPage({
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6 shadow-sm">
             <div className="text-lg font-semibold text-red-900">Dashboard Error</div>
             <div className="mt-2 text-sm text-red-700">
-              There was a problem loading the dashboard. This usually means a column name doesn't match your table structure.
+              There was a problem loading the dashboard. This usually means a column name doesn’t match your table structure.
             </div>
             <pre className="mt-4 text-xs whitespace-pre-wrap bg-red-100 p-3 rounded-lg text-red-800 overflow-auto">
               {message}

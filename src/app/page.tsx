@@ -11,6 +11,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+
     try {
       const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === "INITIAL_SESSION") {
@@ -24,12 +26,16 @@ export default function Home() {
         }
       });
 
-      return () => sub.subscription.unsubscribe();
+      unsubscribe = () => sub.subscription.unsubscribe();
     } catch (e) {
       console.error("Auth initialization error:", e);
-      setError("Failed to initialize authentication.");
-      setReady(true);
+      queueMicrotask(() => {
+        setError("Failed to initialize authentication.");
+        setReady(true);
+      });
     }
+
+    return () => unsubscribe?.();
   }, [router, supabase.auth]);
 
   if (error) {

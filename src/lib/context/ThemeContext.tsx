@@ -12,70 +12,52 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
-  const [mounted, setMounted] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "light";
 
-  useEffect(() => {
     try {
-      // Check localStorage first
-      let stored: Theme | null = null;
-      try {
-        stored = localStorage.getItem("theme") as Theme | null;
-      } catch (e) {
-        // localStorage might be disabled
-      }
-      
-      if (stored && ["light", "dark"].includes(stored)) {
-        setTheme(stored);
-        applyTheme(stored);
-      } else {
-        // Check system preference
-        const isDark = typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
-        const initialTheme = isDark ? "dark" : "light";
-        setTheme(initialTheme);
-        applyTheme(initialTheme);
-      }
-    } catch (error) {
-      console.error("Error initializing theme:", error);
-      setTheme("light");
-    } finally {
-      setMounted(true);
+      const stored = localStorage.getItem("theme") as Theme | null;
+      if (stored && (stored === "light" || stored === "dark")) return stored;
+    } catch {
+      // localStorage might be disabled
     }
-  }, []);
 
-  const applyTheme = (newTheme: Theme) => {
+    const isDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? false;
+    return isDark ? "dark" : "light";
+  });
+
+  function applyTheme(newTheme: Theme) {
     try {
+      // Only touch the DOM/localStorage in the browser
+      if (typeof window === "undefined") return;
+
       const html = document.documentElement;
       if (!html) return;
-      
+
       if (newTheme === "dark") {
         html.classList.add("dark");
       } else {
         html.classList.remove("dark");
       }
-      
+
       try {
         localStorage.setItem("theme", newTheme);
-      } catch (e) {
+      } catch {
         // localStorage might be disabled in private mode
         console.warn("localStorage not available, theme won't persist");
       }
     } catch (error) {
       console.error("Failed to apply theme:", error);
     }
-  };
+  }
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
 
   const toggleTheme = () => {
-    setTheme((prevTheme) => {
-      const newTheme = prevTheme === "light" ? "dark" : "light";
-      applyTheme(newTheme);
-      return newTheme;
-    });
+    setTheme((prevTheme) => (prevTheme === "light" ? "dark" : "light"));
   };
-
-  if (!mounted) {
-    return <>{children}</>;
-  }
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>

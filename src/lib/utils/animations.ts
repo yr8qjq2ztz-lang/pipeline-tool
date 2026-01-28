@@ -27,19 +27,28 @@ export const animationClasses = {
 };
 
 // Smooth number animation from old to new value
-export function animateNumber(from: number, to: number, duration: number = 1000): Promise<void> {
+export function animateNumber(
+  from: number,
+  to: number,
+  duration: number = 1000,
+  onUpdate?: (value: number) => void
+): Promise<void> {
   return new Promise((resolve) => {
     // Validate inputs
-    const validFrom = typeof from === 'number' && !isNaN(from) ? from : 0;
-    const validTo = typeof to === 'number' && !isNaN(to) ? to : 0;
+    const validFrom = typeof from === "number" && !isNaN(from) ? from : 0;
+    const validTo = typeof to === "number" && !isNaN(to) ? to : 0;
     const validDuration = Math.max(100, duration); // Minimum 100ms
     
     const start = Date.now();
     const range = validTo - validFrom;
+    const safeOnUpdate = onUpdate ?? (() => undefined);
 
     const animate = () => {
       const elapsed = Date.now() - start;
       const progress = Math.min(elapsed / validDuration, 1);
+
+      const value = validFrom + range * progress;
+      safeOnUpdate(isFinite(value) ? value : validFrom);
       
       if (progress < 1) {
         requestAnimationFrame(animate);
@@ -69,9 +78,15 @@ export function springAnimation(
     // Spring ease-out curve
     const easeOut = 1 - Math.pow(1 - progress, 3);
     const value = from + range * easeOut;
+
+    if (element && element.style) {
+      element.style.transform = `translateY(${isFinite(value) ? value : 0}px)`;
+    }
     
     if (progress < 1) {
       requestAnimationFrame(animate);
+    } else if (element && element.style) {
+      element.style.transform = "";
     }
   };
 

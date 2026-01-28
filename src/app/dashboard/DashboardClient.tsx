@@ -190,7 +190,7 @@ export default function DashboardClient({
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} angle={-20} height={60} />
                 <YAxis tickFormatter={(v) => `${Math.round(Number(v) / 1000)}k`} />
-                <Tooltip formatter={(v: any) => money(Number(v))} />
+                <Tooltip formatter={(value: unknown) => money(Number(value))} />
                 <Line type="monotone" dataKey="weighted" strokeWidth={3} dot={false} stroke="#10b981" />
               </LineChart>
             </ResponsiveContainer>

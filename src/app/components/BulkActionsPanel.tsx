@@ -4,7 +4,10 @@ import { useState } from "react";
 
 export interface BulkActionProps {
   selectedIds: string[];
-  onAction: (action: string, value?: any) => Promise<void>;
+  onAction: (
+    action: "updateStage" | "updateBranch" | "deleteBulk",
+    value?: string
+  ) => Promise<void>;
   onClose: () => void;
 }
 
@@ -14,7 +17,9 @@ export function BulkActionsPanel({
   onClose,
 }: BulkActionProps) {
   const [loading, setLoading] = useState(false);
-  const [selectedAction, setSelectedAction] = useState<string>("");
+  const [selectedAction, setSelectedAction] = useState<
+    "" | "updateStage" | "updateBranch" | "deleteBulk"
+  >("");
   const [selectedStage, setSelectedStage] = useState<string>("");
   const [selectedBranch, setSelectedBranch] = useState<string>("");
 
@@ -89,7 +94,17 @@ export function BulkActionsPanel({
           </label>
           <select
             value={selectedAction}
-            onChange={(e) => setSelectedAction(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (
+                value === "" ||
+                value === "updateStage" ||
+                value === "updateBranch" ||
+                value === "deleteBulk"
+              ) {
+                setSelectedAction(value);
+              }
+            }}
             className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
           >
             <option value="">Select an action...</option>

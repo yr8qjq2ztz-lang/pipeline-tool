@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
-import { useTheme } from "@/lib/context/ThemeContext";
 import { FunnelChart, CycleTimeChart, WinLossChart } from "@/app/components/AnalyticsCharts";
-import type { FunnelData, CycleTimeData, WinLossData } from "@/app/components/AnalyticsCharts";
+import type { FunnelData, CycleTimeData } from "@/app/components/AnalyticsCharts";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 const STAGES = ["Prospecting", "Qualified", "Proposal", "Negotiation", "Won", "Lost"];
 
@@ -17,23 +17,28 @@ interface OpportunityRow {
   rolling_12m_value: number | null;
   probability: number | null;
   created_at: string | null;
-  accounts?: { name: string } | null;
+  accounts?: { name: string }[] | null;
 }
 
 export default function AnalyticsPage() {
   const router = useRouter();
-  const { theme } = useTheme();
   const supabase = supabaseBrowser();
 
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<OpportunityRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  function isOpportunityRow(r: unknown): r is OpportunityRow {
+    if (!r || typeof r !== "object") return false;
+    const rec = r as { id?: unknown };
+    return typeof rec.id === "string" && rec.id.length > 0;
+  }
+
   useEffect(() => {
     async function load() {
       try {
         const { data: sub } = supabase.auth.onAuthStateChange(
-          async (event: any, session: any) => {
+          async (event: AuthChangeEvent, session: Session | null) => {
             if (event !== "INITIAL_SESSION") return;
             if (!session) {
               router.replace("/login");
@@ -50,12 +55,12 @@ export default function AnalyticsPage() {
               
               // Validate and filter data
               const validRows = Array.isArray(data) 
-                ? data.filter((r: any) => r && typeof r === 'object' && r.id)
+                ? data.filter(isOpportunityRow)
                 : [];
               
-              setRows(validRows as any);
-            } catch (e: any) {
-              const errorMsg = e?.message ?? "Failed to load analytics";
+              setRows(validRows);
+            } catch (e: unknown) {
+              const errorMsg = e instanceof Error ? e.message : "Failed to load analytics";
               console.error("Analytics load error:", errorMsg);
               setError(errorMsg);
             } finally {
@@ -111,7 +116,7 @@ export default function AnalyticsPage() {
                 const timeDiff = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
                 const daysInStage = isFinite(timeDiff) ? timeDiff : 0;
                 return sum + daysInStage;
-              } catch (e) {
+              } catch {
                 console.warn("Error calculating days for row:", r);
                 return sum;
               }

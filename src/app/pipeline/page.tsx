@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { WhatIfSimulator } from "@/app/components/WhatIfSimulator";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 type Branch = { id: string; name: string };
 type Account = { id: string; name: string };
@@ -37,6 +37,34 @@ const STAGES = [
   "Lost",
 ] as const;
 
+type CloseWindow = "all" | "next30" | "next60" | "past";
+type ProbBand = "all" | "0-30" | "31-60" | "61-100";
+type Health = "all" | "at-risk" | "caution" | "healthy";
+
+function getErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  return "Unknown error";
+}
+
+function parseStage(value: string): (typeof STAGES)[number] {
+  return (STAGES as readonly string[]).includes(value)
+    ? (value as (typeof STAGES)[number])
+    : "Prospecting";
+}
+
+function parseCloseWindow(value: string): CloseWindow {
+  return value === "next30" || value === "next60" || value === "past" ? value : "all";
+}
+
+function parseProbBand(value: string): ProbBand {
+  return value === "0-30" || value === "31-60" || value === "61-100" ? value : "all";
+}
+
+function parseHealth(value: string): Health {
+  return value === "at-risk" || value === "caution" || value === "healthy" ? value : "all";
+}
+
 function isoToDate(iso: string | null): Date | null {
   if (!iso) return null;
   const d = new Date(iso + "T00:00:00");
@@ -66,10 +94,6 @@ export default function PipelinePage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [rows, setRows] = useState<OpportunityRow[]>([]);
-
-  const [branchOptions, setBranchOptions] = useState<{ id: string; name: string }[]>([
-    { id: "All", name: "All" },
-  ]);
 
   // View mode: Board vs Table
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
@@ -116,36 +140,10 @@ export default function PipelinePage() {
   // ---- Filters ----
   const [filterBranchId, setFilterBranchId] = useState<string>(""); // "" = All
   const [filterStage, setFilterStage] = useState<string>(""); // "" = All
-  const [filterCloseWindow, setFilterCloseWindow] = useState<
-    "all" | "next30" | "next60" | "past"
-  >("all");
-  const [filterProbBand, setFilterProbBand] = useState<
-    "all" | "0-30" | "31-60" | "61-100"
-  >("all");
-  const [filterHealth, setFilterHealth] = useState<
-    "all" | "at-risk" | "caution" | "healthy"
-  >("all");
+  const [filterCloseWindow, setFilterCloseWindow] = useState<CloseWindow>("all");
+  const [filterProbBand, setFilterProbBand] = useState<ProbBand>("all");
+  const [filterHealth, setFilterHealth] = useState<Health>("all");
   const [search, setSearch] = useState<string>("");
-
-  useEffect(() => {
-    async function loadBranches() {
-      const { data, error } = await supabase
-        .from("opportunities")
-        .select("branch_id")
-        .not("branch_id", "is", null);
-
-      if (error) return;
-
-      const ids = Array.from(new Set((data ?? []).map((r: any) => String(r.branch_id))));
-
-      setBranchOptions([
-        { id: "All", name: "All" },
-        ...ids.map((id) => ({ id, name: `${id.slice(0, 8)}…` })),
-      ]);
-    }
-
-    loadBranches();
-  }, [supabase]);
 
   const accountNameToId = useMemo(() => {
     const map = new Map<string, string>();
@@ -222,7 +220,7 @@ export default function PipelinePage() {
       
       const count = data?.length ?? 0;
       console.log("Fetched opportunities, count:", count);
-      setRows((data ?? []) as any);
+      setRows((data ?? []) as OpportunityRow[]);
     } catch (e) {
       console.error("Failed to fetch opportunities:", e);
       setDbError("Failed to load opportunities. Check database connection.");
@@ -263,7 +261,7 @@ export default function PipelinePage() {
   }
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
       if (event !== "INITIAL_SESSION") return;
 
       if (!session) {
@@ -275,8 +273,8 @@ export default function PipelinePage() {
         setDbError(null);
         setLoading(true);
         await Promise.all([fetchBranches(), fetchAccounts(), fetchOpportunities()]);
-      } catch (e: any) {
-        setDbError(e?.message ?? "Unknown error");
+      } catch (e: unknown) {
+        setDbError(getErrorMessage(e));
       } finally {
         setLoading(false);
       }
@@ -384,8 +382,8 @@ export default function PipelinePage() {
       await Promise.all([fetchAccounts(), fetchOpportunities()]);
       resetCreateForm();
       setShowCreate(false);
-    } catch (e: any) {
-      setCreateError(e?.message ?? "Unknown error");
+    } catch (e: unknown) {
+      setCreateError(getErrorMessage(e));
       console.error("Create error:", e);
     } finally {
       setSavingCreate(false);
@@ -397,7 +395,7 @@ export default function PipelinePage() {
     setEditId(row.id);
     setEditAccountName(row.accounts?.name ?? "(unknown)");
     setEditBranchId(row.branch_id ?? "");
-    setEditStage((row.stage as any) ?? "Prospecting");
+    setEditStage(parseStage(row.stage ?? "Prospecting"));
     setEditCloseDate(row.close_date ?? "");
     setEditRolling12mValue(String(row.rolling_12m_value ?? 0));
     setEditProbability(String(row.probability ?? 0));
@@ -454,8 +452,8 @@ export default function PipelinePage() {
 
       await fetchOpportunities();
       setEditOpen(false);
-    } catch (e: any) {
-      setEditError(e?.message ?? "Unknown error");
+    } catch (e: unknown) {
+      setEditError(getErrorMessage(e));
       console.error("Edit error:", e);
     } finally {
       setSavingEdit(false);
@@ -488,10 +486,10 @@ export default function PipelinePage() {
         console.error("Stage update error:", error);
         throw new Error(error.message || "Failed to update stage");
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Stage update failed:", e);
       await fetchOpportunities();
-      alert(e?.message ?? "Update failed");
+      alert(getErrorMessage(e));
     } finally {
       setRowSavingId(null);
     }
@@ -531,8 +529,8 @@ export default function PipelinePage() {
       await fetchOpportunities();
       setEditOpen(false);
       
-    } catch (e: any) {
-      const msg = e?.message ?? "Delete failed";
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e) || "Delete failed";
       setEditError(msg);
       console.error("Delete error caught:", msg, e);
       // Refresh to sync UI with DB
@@ -899,7 +897,7 @@ export default function PipelinePage() {
             <select
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all appearance-none cursor-pointer hover:border-gray-400"
               value={filterCloseWindow}
-              onChange={(e) => setFilterCloseWindow(e.target.value as any)}
+              onChange={(e) => setFilterCloseWindow(parseCloseWindow(e.target.value))}
             >
               <option value="all">All dates</option>
               <option value="next30">Next 30 days</option>
@@ -913,7 +911,7 @@ export default function PipelinePage() {
             <select
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all appearance-none cursor-pointer hover:border-gray-400"
               value={filterProbBand}
-              onChange={(e) => setFilterProbBand(e.target.value as any)}
+              onChange={(e) => setFilterProbBand(parseProbBand(e.target.value))}
             >
               <option value="all">All ranges</option>
               <option value="0-30">0–30%</option>
@@ -927,7 +925,7 @@ export default function PipelinePage() {
             <select
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all appearance-none cursor-pointer hover:border-gray-400"
               value={filterHealth}
-              onChange={(e) => setFilterHealth(e.target.value as any)}
+              onChange={(e) => setFilterHealth(parseHealth(e.target.value))}
             >
               <option value="all">All deals</option>
               <option value="at-risk">🔴 At Risk</option>
@@ -1059,7 +1057,7 @@ export default function PipelinePage() {
               <select
                 className="mt-1 w-full rounded-lg border px-3 py-2"
                 value={createStage}
-                onChange={(e) => setCreateStage(e.target.value as any)}
+                onChange={(e) => setCreateStage(parseStage(e.target.value))}
               >
                 {STAGES.map((s) => (
                   <option key={s} value={s}>
@@ -1278,7 +1276,7 @@ export default function PipelinePage() {
                   <td className="p-3">
                     <select
                       className="rounded-lg border px-2 py-1"
-                      value={(o.stage ?? "Prospecting") as any}
+                      value={parseStage(o.stage ?? "Prospecting")}
                       disabled={rowSavingId === o.id}
                       onChange={(e) => quickUpdateStage(o.id, e.target.value)}
                     >
@@ -1364,7 +1362,7 @@ export default function PipelinePage() {
                 <select
                   className="mt-1 w-full rounded-lg border px-3 py-2"
                   value={editStage}
-                  onChange={(e) => setEditStage(e.target.value as any)}
+                  onChange={(e) => setEditStage(parseStage(e.target.value))}
                 >
                   {STAGES.map((s) => (
                     <option key={s} value={s}>

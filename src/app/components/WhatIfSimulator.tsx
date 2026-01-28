@@ -38,7 +38,7 @@ export function WhatIfSimulator({ onClose, deals }: WhatIfSimulatorProps) {
 
   const change = adjustedValue - originalValue;
   const changePercent = originalValue > 0 ? ((change / originalValue) * 100).toFixed(1) : "0";
-  const isNaN_change = !isFinite(Number(changePercent));
+  const safeChangePercent = isFinite(Number(changePercent)) ? changePercent : "0";
 
   const handleProbabilityChange = (dealId: string, value: number) => {
     // Validate input
@@ -131,7 +131,7 @@ export function WhatIfSimulator({ onClose, deals }: WhatIfSimulatorProps) {
                   ? "text-green-900 dark:text-green-100"
                   : "text-red-900 dark:text-red-100"
               }`}>
-                {change >= 0 ? "+" : ""}{(change / 1000).toFixed(1)}k ({changePercent}%)
+                {change >= 0 ? "+" : ""}{(change / 1000).toFixed(1)}k ({safeChangePercent}%)
               </div>
             </div>
           </div>

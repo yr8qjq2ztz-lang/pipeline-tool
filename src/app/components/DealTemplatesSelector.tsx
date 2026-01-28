@@ -12,6 +12,8 @@ export function DealTemplatesSelector({
   onSelectTemplate,
   onClose,
 }: DealTemplatesSelectorProps) {
+  const [selectedId, setSelectedId] = useState<string>("");
+
   // Validate callback functions exist
   if (!onSelectTemplate || !onClose) {
     console.error("DealTemplatesSelector: Missing required callbacks");
@@ -35,8 +37,6 @@ export function DealTemplatesSelector({
       </div>
     );
   }
-
-  const [selectedId, setSelectedId] = useState<string>("");
 
   const handleSelect = () => {
     // Validate selectedId is not empty

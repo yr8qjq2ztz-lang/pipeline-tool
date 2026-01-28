@@ -9,36 +9,31 @@ import { useRouter } from "next/navigation";
 export default function LoginPage() {
   const router = useRouter();
 
-  // Create Supabase ONLY in the browser (prevents build-time/prerender crashes)
-  const [supabase, setSupabase] = useState<ReturnType<typeof supabaseBrowser> | null>(null);
+  // Client-only: safe to create the browser client directly.
+  const supabase = supabaseBrowser();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => {
+    try {
+      return localStorage.getItem("rememberMe_email") ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => {
+    try {
+      return Boolean(localStorage.getItem("rememberMe_email"));
+    } catch {
+      return false;
+    }
+  });
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
 
-  useEffect(() => {
-    setSupabase(supabaseBrowser());
-    
-    // Load remembered email if available
-    try {
-      const savedEmail = localStorage.getItem("rememberMe_email");
-      if (savedEmail) {
-        setEmail(savedEmail);
-        setRememberMe(true);
-      }
-    } catch (e) {
-      // localStorage might be disabled
-    }
-  }, []);
-
   // Wait for Supabase auth to initialize before doing anything clever.
   useEffect(() => {
-    if (!supabase) return;
-
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "INITIAL_SESSION") {
         setChecking(false);
@@ -88,7 +83,7 @@ export default function LoginPage() {
           } else {
             localStorage.removeItem("rememberMe_email");
           }
-        } catch (e) {
+        } catch {
           // localStorage might be disabled
         }
         
@@ -116,7 +111,7 @@ export default function LoginPage() {
     }
   }
 
-  if (!supabase || checking) return <div className="p-6">Loading…</div>;
+  if (checking) return <div className="p-6">Loading…</div>;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
