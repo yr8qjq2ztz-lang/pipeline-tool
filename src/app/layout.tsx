@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/context/ThemeContext";
+import DemoModeBanner from "./components/DemoModeBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,12 +27,15 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const demoModeEnabled = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased transition-colors duration-300 bg-white dark:bg-slate-950 text-black dark:text-white`}
       >
         <ThemeProvider>
+          <DemoModeBanner enabled={demoModeEnabled} />
           {children}
         </ThemeProvider>
       </body>

@@ -14,6 +14,7 @@ Next.js 16 + React 19 sales pipeline management app using Supabase Auth + Supaba
 
 	- `NEXT_PUBLIC_SUPABASE_URL`
 	- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+	- `NEXT_PUBLIC_DEMO_MODE` (optional)
 
 3. Run the app
 
@@ -30,6 +31,7 @@ Recommended: Vercel + Supabase.
 3. Add Environment Variables in Vercel (Production + Preview):
 	- `NEXT_PUBLIC_SUPABASE_URL`
 	- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+	- `NEXT_PUBLIC_DEMO_MODE=true` (optional: shows a demo banner)
 4. In Supabase Auth settings:
 	- Set **Site URL** to your Vercel domain (e.g. `https://your-app.vercel.app`)
 	- Add Redirect URLs as needed (e.g. `https://your-app.vercel.app/**`)
