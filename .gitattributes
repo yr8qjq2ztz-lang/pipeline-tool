@@ -1,0 +1,38 @@
+# Normalize line endings for cross-platform dev (Windows/macOS/Linux)
+# Keep text files as LF in the repo; Git will convert on checkout if needed.
+
+* text=auto
+
+# Source / config files
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.js   text eol=lf
+*.jsx  text eol=lf
+*.mjs  text eol=lf
+*.cjs  text eol=lf
+*.json text eol=lf
+*.css  text eol=lf
+*.scss text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.sql  text eol=lf
+*.env  text eol=lf
+*.env.* text eol=lf
+
+# Windows scripts
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+# Shell scripts
+*.sh   text eol=lf
+
+# Binaries
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
