@@ -209,162 +209,39 @@ Pipeline page supports both views (controlled by `viewMode` state). Kanban group
 - **Dates**: ISO format, nullable
 
 ### Authentication Edge Cases
-- Signup with email confirmation enabled: User gets "Check your email" message, session is null
-- Server-side redirects via `redirect()` not to be wrapped in try/catch; they throw NavigationError
-- Browser clients must initialize Supabase in useEffect to avoid build-time errors
+# Copilot instructions (pipeline-tool)
 
----
+## What this repo is
+- Next.js App Router app (Next 16 + React 19 + TypeScript) for sales pipeline + dashboards.
+- Data/auth: Supabase Postgres + Supabase Auth.
 
-## Special Features & Implementation Notes
+## Key paths to know
+- Pages/routes: `src/app/*` (not `/pages`). Main entrypoints: `src/app/pipeline/page.tsx`, `src/app/dashboard/page.tsx`, `src/app/analytics/page.tsx`, `src/app/login/page.tsx`.
+- Supabase clients: `src/lib/supabase/browser.ts` (client-only; returns a safe stub during SSR/build) and `src/lib/supabase/server.ts` (Server Components).
+- Reusable UI: `src/app/components/*` (Recharts wrappers, What-If modal, bulk actions, etc.).
 
-### 1. Keyboard Shortcuts System
-- Defined in `pipeline/page.tsx` and passed to `useKeyboardShortcuts()` hook
-- Auto-skips input fields; supports single keys (`n`, `f`, `d`), `/` for search, `?` for help
-- Registry: `{ n: toggleCreate, f: clearFilters, d: goToDashboard, ...}`
+## Local workflow
+- Run: `npm run dev` (Next dev server), `npm run build`, `npm run lint`, `npm run typecheck`.
+- Required env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (see `.env.example`).
+- Optional: `NEXT_PUBLIC_DEMO_MODE=true` shows the banner (see `src/app/layout.tsx`).
 
-### 2. What-If Simulator
-- Interactive modal in `WhatIfSimulator.tsx`; allows probability and value adjustment
-- Recalculates weighted pipeline impact in real-time
-- Validates slider bounds (0-100 for probability, >0 for value)
-- Shows delta from original state
+## Auth + data fetching patterns (match existing code)
+- Home/login are client pages and wait for `onAuthStateChange(... INITIAL_SESSION ...)` before redirecting (see `src/app/page.tsx`, `src/app/login/page.tsx`).
+- Dashboard is a Server Component: create client via `supabaseServer()`, call `supabase.auth.getUser()`, then `redirect("/login")` if not logged in (see `src/app/dashboard/page.tsx`).
+- Keep “server fetch, client render”: server computes KPI/props → `DashboardClient` renders charts (`src/app/dashboard/DashboardClient.tsx`).
 
-### 3. Deal Prediction Scoring
-- Located in `prediction.ts`; analyzes overdue actions, close date, probability
-- Returns score 0-100 for deal health
-- Used in `pipeline/page.tsx` for deal highlighting and sorting
+## Database schema is partially optional (common footgun)
+- Canonical checklist: `SUPABASE_SCHEMA_CHECKLIST.md`.
+- Optional columns are enabled via idempotent SQL scripts (repo root):
+  - `SUPABASE_SQL_sales_person.sql` adds `opportunities.sales_person` (fixes “column opportunities.sales_person does not exist”).
+  - Others: `battery_solution`, `vehicle_brand/model`, `owner_user_id`, `next_action_completed_at`, audit fields.
 
-#### Prediction Score Algorithm (`prediction.ts`)
+## OpenAI integration (battery recommendations)
+- API route: `src/app/api/battery-recommendation/route.ts` (Node runtime). Uses `OPENAI_API_KEY` and optional `OPENAI_MODEL` (default `gpt-4o-mini`), with a 15s timeout.
 
-Input factors validated with bounds:
-```tsx
-interface DealScoreFactors {
-  ageInDays: number          // Days since opp created
-  daysToClose: number        // Days until close_date (can be negative)
-  probability: number        // 0-100, clamped [0, 100]
-  hasDueAction: boolean      // next_action exists
+## Conventions to preserve when editing
+- Dates stored as `YYYY-MM-DD` strings for Postgres date columns and parsed via `new Date(iso + "T00:00:00")` (see pipeline/dashboard formatting helpers).
+- Probability is treated as either 0–100 or 0–1 in dashboard calculations (`prob = pRaw <= 1 ? pRaw : pRaw / 100`). Don’t “simplify” this without migrating data.
   isDueActionOverdue: boolean // next_action_due < today
+
   stageProgress: number      // 0-1, stage position in pipeline
-  valueScore: number         // rolling_12m_value for confidence weighting
-}
-```
-
-**Scoring Factors** (modifies `baseScore` starting at `probability`):
-1. **Overdue actions** (highest risk):
-   - `isDueActionOverdue` → baseScore -= 20 (strong penalty)
-   - `hasDueAction` → baseScore += 5 (action on track)
-
-2. **Close date proximity** (urgency signal):
-   - Past due (`daysToClose < 0`) → baseScore -= 25 (likely stalled)
-   - Closing in <7 days → baseScore += 15 (imminent closure)
-   - Closing in <30 days → baseScore += 10 (reasonable timeline)
-
-3. **Deal age vs stage progress** (stalling detection):
-   - Expected age = `(stageProgress + 0.5) × 30 × 4` days
-   - If `ageInDays > expectedAge × 1.5` → baseScore -= 15 (stalled)
-   - If `ageInDays < expectedAge × 0.5` → baseScore += 10 (fast progress)
-
-4. **Value-based confidence** (affects confidence score, not likelihood):
-   - `valueScore > $100k` → confidence += 25 (high-value deals scrutinized)
-   - `valueScore < $10k` → confidence += 10 (small deals quick)
-
-**Output**:
-```tsx
-{
-  closureLikelihood: 0-100,        // Score after all adjustments, clamped [0, 100]
-  confidence: 0-100,              // How sure we are (depends on value, overdue actions)
-  riskFactors: string[],          // ["Overdue action", "Stalled deal", ...]
-  recommendedActions: string[],   // ["Follow up", "Review strategy", ...]
-  trend: "improving"|"declining"|"stable" // baseScore vs original probability
-}
-```
-
-**Bounds Checking**:
-- All numeric inputs validated with `Number.isFinite()` before use
-- Probabilities clamped to [0, 100]
-- Stage progress clamped to [0, 1]
-- Final scores clamped to [0, 100]
-- Invalid input object → return safe default (score 0, all risk factors)
-
-### 4. Analytics Dashboard
-- Multi-chart view: Funnel, Win/Loss Rate, Cycle Time, Stage Aging
-- Data validation and NaN protection in `AnalyticsCharts.tsx`
-- Computed on-demand from opportunity data (no separate analytics table)
-
-#### Analytics Computation Details (`analytics/page.tsx`)
-
-**Funnel Analysis** - Shows deal progression and weighted value through each stage:
-```tsx
-// For each stage: count deals + sum weighted value
-value = Σ(rolling_12m_value × (probability / 100)) for all deals in stage
-count = number of opportunities in stage
-// Displayed: count + value in funnel chart
-```
-
-**Cycle Time by Stage** - Average days deals spend at each stage:
-```tsx
-// For each stage:
-avgDaysInStage = Σ(now - created_at) / count
-// Measures how long deals stay before progression
-// Uses created_at field (when opp was created); note: doesn't reset per stage transition
-// Includes all deals currently in stage, regardless of how long they've been there
-```
-
-**Win/Loss Analysis** - Conversion rates showing how many deals closed at each stage:
-```tsx
-// For each pre-final stage (Prospecting through Negotiation):
-// Count how many "Won" deals exist across entire pipeline
-// Count how many "Lost" deals exist across entire pipeline
-// Ratio shows % of deals that won vs lost from that stage baseline
-// Used to identify leakiest stages (highest loss rate)
-```
-
-**Key Metrics** - Aggregate KPIs:
-- **Total Opportunities**: All records regardless of stage
-- **Won Deals**: Count where `stage === "Won"`
-- **Lost Deals**: Count where `stage === "Lost"`
-- **Win Rate**: (Won Deals / Total Opportunities) × 100%
-
-**Data Validation**:
-- Array type-check: `Array.isArray(data) ? filter : []`
-- Valid rows: `r && typeof r === 'object' && r.id`
-- Number safety: `isFinite(value) ? value : 0`
-- Date parsing: Try/catch on `new Date()` with fallback to current time
-
-### 5. Dark Mode + System Preference
-- `ThemeContext.tsx` manages state and localStorage persistence
-- System preference detection via `window.matchMedia("(prefers-color-scheme: dark)")`
-- Gracefully handles localStorage unavailable (private browsing)
-
----
-
-## Integration Points & Dependencies
-
-- **Supabase SDKs**: `@supabase/ssr` (auth/session), `@supabase/supabase-js` (queries)
-- **Tailwind**: Utility-first CSS v4; globals.css imported in layout
-- **Recharts**: Lightweight charting; passed data as `data` prop, config via XAxis/YAxis/Tooltip
-- **Next.js routing**: App Router; pages auto-route from file path; `useRouter()` for navigation, `redirect()` for server-side redirects
-- **localStorage**: Used for theme, saved views, deal templates; always wrapped in try/catch for error tolerance
-
----
-
-## When Implementing New Features
-
-1. **Data model first**: Define Supabase table/columns if new entity type
-2. **Auth check**: Ensure page checks session; use server-side redirect for protected routes
-3. **Server fetch, client render**: Data fetching in server components or useEffect; charts/forms in client
-4. **Type safety**: Define TypeScript types for table shapes (Branch, Account, OpportunityRow patterns)
-5. **Validation**: Validate before Supabase insert/update; show error toast/modal
-6. **Robustness**: Check for null/undefined, array bounds, number bounds (NaN/Infinity); handle localStorage unavailable
-7. **Accessibility**: Skip event handlers for input fields; use semantic HTML when possible
-8. **Testing**: `npm run build` catches type errors; manual test on localhost:3000
-
----
-
-## Robustness Principles
-
-All new code should follow patterns in [ROBUSTNESS.md](ROBUSTNESS.md):
-- **Input validation** at function entry (type, null, range checks)
-- **Number safety**: Check `Number.isFinite()` before calculations; use `Math.max/min` for bounds
-- **Error isolation**: Wrap risky operations in try/catch (especially event listeners, localStorage, DOM access)
-- **Type narrowing**: Use TypeScript to eliminate null/undefined at compile time; runtime checks as fallback
-

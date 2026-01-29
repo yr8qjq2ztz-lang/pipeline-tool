@@ -13,6 +13,7 @@ type Branch = { id: string; name: string };
 
 type Opportunity = {
   id: string;
+  account_id?: string | null;
   branch_id: string | null;
   sales_person?: string | null;
   stage: string | null;
@@ -25,6 +26,38 @@ type Opportunity = {
   accounts?: { id: string; name: string | null }[] | null;
   branches?: { id: string; name: string | null }[] | null;
 };
+
+function isMissingColumnError(message: string | undefined | null, column: string) {
+  if (!message) return false;
+  const msg = message.toLowerCase();
+  const col = column.toLowerCase();
+
+  // Postgres/PostgREST error messages vary by adapter/version. Examples:
+  // - "column opportunities.sales_person does not exist"
+  // - "column \"sales_person\" does not exist"
+  // - "unknown column sales_person"
+  const mentionsColumn = msg.includes("column") || msg.includes("unknown column");
+  const mentionsName = msg.includes(`opportunities.${col}`) || msg.includes(col);
+  const missing = msg.includes("does not exist") || msg.includes("unknown column");
+
+  return mentionsColumn && mentionsName && missing;
+}
+
+function isMissingRelationshipOrTableError(message: string | undefined | null, tableOrRelation: string) {
+  if (!message) return false;
+  const msg = message.toLowerCase();
+  const name = tableOrRelation.toLowerCase();
+
+  // Examples seen from PostgREST/Supabase:
+  // - "Could not find a relationship between 'opportunities' and 'accounts' in the schema cache"
+  // - "relation \"accounts\" does not exist"
+  // - "Could not find the 'accounts' table"
+  const isRelationship = msg.includes("relationship") && msg.includes(name);
+  const isSchemaCache = msg.includes("schema cache") && msg.includes(name);
+  const isRelationMissing = msg.includes("relation") && msg.includes(name) && msg.includes("does not exist");
+
+  return isRelationship || isSchemaCache || isRelationMissing;
+}
 
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -42,7 +75,7 @@ export default async function DashboardPage({
   try {
     const params = await searchParams;
     const selectedBranchId = params.branch && params.branch !== "All" ? params.branch : "All";
-    const selectedSalesPerson = params.salesPerson && params.salesPerson !== "All" ? params.salesPerson : "All";
+    let selectedSalesPerson = params.salesPerson && params.salesPerson !== "All" ? params.salesPerson : "All";
 
     const supabase = await supabaseServer();
 
@@ -58,33 +91,73 @@ export default async function DashboardPage({
       branches = branchesRes.data as Branch[];
     }
 
-  // Pull opportunities with account and branch data for consistency with pipeline
-  let q = supabase
-    .from("opportunities")
-    .select("id, branch_id, sales_person, stage, close_date, rolling_12m_value, probability, next_action_due, next_action_completed_at, created_at, accounts(id, name), branches(id, name)");
+  // Pull opportunities.
+  // Several fields are OPTIONAL and/or depend on FK relationships:
+  // - opportunities.sales_person (optional column)
+  // - opportunities.next_action_completed_at (optional column)
+  // - embedded selects accounts(...), branches(...) require relationships/tables
+    const scalarBase =
+      "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action_due, created_at";
 
-  if (selectedBranchId !== "All") {
-    q = q.eq("branch_id", selectedBranchId);
-  }
+    let hasSalesPersonColumn = true;
+    let hasCompletionColumn = true;
+    let hasEmbeddedJoins = true;
 
-  if (selectedSalesPerson !== "All") {
-    q = q.eq("sales_person", selectedSalesPerson);
-  }
+    const buildSelect = () => {
+      const fields: string[] = [scalarBase];
+      if (hasSalesPersonColumn) fields.push("sales_person");
+      if (hasCompletionColumn) fields.push("next_action_completed_at");
+      if (hasEmbeddedJoins) fields.push("accounts(id, name)", "branches(id, name)");
+      return fields.join(", ");
+    };
 
-  const res = await q;
-  if (res.error) {
-    throw new Error(res.error.message);
-  }
+    const runQuery = async () => {
+      let q = supabase.from("opportunities").select(buildSelect());
 
-    const data = (res.data ?? []) as Opportunity[];
+      if (selectedBranchId !== "All") {
+        q = q.eq("branch_id", selectedBranchId);
+      }
 
-  const salesPeople = Array.from(
-    new Set(
-      data
-        .map((r) => String(r.sales_person ?? "").trim())
-        .filter(Boolean)
-    )
-  ).sort((a, b) => a.localeCompare(b));
+      if (hasSalesPersonColumn && selectedSalesPerson !== "All") {
+        q = q.eq("sales_person", selectedSalesPerson);
+      }
+
+      return await q;
+    };
+
+    // Attempt query; progressively degrade on common schema mismatches.
+    let res = await runQuery();
+    if (res.error && isMissingColumnError(res.error.message, "sales_person")) {
+      hasSalesPersonColumn = false;
+      selectedSalesPerson = "All";
+      res = await runQuery();
+    }
+    if (res.error && isMissingColumnError(res.error.message, "next_action_completed_at")) {
+      hasCompletionColumn = false;
+      res = await runQuery();
+    }
+    if (
+      res.error &&
+      (isMissingRelationshipOrTableError(res.error.message, "accounts") ||
+        isMissingRelationshipOrTableError(res.error.message, "branches"))
+    ) {
+      hasEmbeddedJoins = false;
+      res = await runQuery();
+    }
+
+    if (res.error) throw new Error(res.error.message);
+
+    const data = (res.data ?? []) as unknown as Opportunity[];
+
+  const salesPeople = hasSalesPersonColumn
+    ? Array.from(
+        new Set(
+          data
+            .map((r) => String(r.sales_person ?? "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b))
+    : [];
 
   const now = new Date();
   const in30 = new Date(now);
@@ -187,7 +260,7 @@ export default async function DashboardPage({
     })
     .slice(0, 5) // top 5
     .map((r) => ({
-      accountName: r.accounts?.[0]?.name ?? "Unknown",
+      accountName: r.accounts?.[0]?.name ?? (r.account_id ? shortId(String(r.account_id)) : "Unknown"),
       stage: r.stage ?? "",
       value: Number(r.rolling_12m_value ?? 0),
       probability: Number(r.probability ?? 0),
@@ -199,7 +272,7 @@ export default async function DashboardPage({
         branches={dropdownBranches}
         selectedBranchId={selectedBranchId}
         selectedBranchLabel={branchNameById.get(selectedBranchId) ?? (selectedBranchId === "All" ? "All" : shortId(selectedBranchId))}
-        salesPeople={["All", ...salesPeople]}
+        salesPeople={hasSalesPersonColumn ? ["All", ...salesPeople] : ["All"]}
         selectedSalesPerson={selectedSalesPerson}
         kpis={{
           openCount,

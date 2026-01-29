@@ -713,9 +713,13 @@ export default function PipelinePage() {
       if (error) {
         const msg = error.message || "Failed to reopen next action";
         if (/next_action_completed_at/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
-          throw new Error(
-            "Completion tracking isn't in your database yet. Add a nullable timestamptz column on opportunities: next_action_completed_at."
+          // Completion tracking is optional; if the column doesn't exist, we can't persist reopen.
+          // Refresh to restore server truth and continue without blocking the user.
+          await fetchOpportunities();
+          alert(
+            "Completion tracking isn't enabled in your database yet. To enable reopen/history, run SUPABASE_SQL_next_action_completed_at.sql (see SUPABASE_SCHEMA_CHECKLIST.md)."
           );
+          return;
         }
 
         const isMissingMeta =
@@ -837,9 +841,12 @@ export default function PipelinePage() {
         }
 
         if (/next_action_completed_at/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
-          throw new Error(
-            "Completion tracking isn't in your database yet. Add a nullable timestamptz column on opportunities: next_action_completed_at."
-          );
+          // Completion tracking is optional (see SUPABASE_SCHEMA_CHECKLIST.md).
+          // Retry the update without referencing the missing column.
+          const retryUpdate = { ...(updateWithOwner as Record<string, unknown>) };
+          delete retryUpdate.next_action_completed_at;
+          const retry = await supabase.from("opportunities").update(retryUpdate).eq("id", editId);
+          error = retry.error;
         }
 
         const missingOwner = /owner_user_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
@@ -1063,9 +1070,45 @@ export default function PipelinePage() {
       if (error) {
         const msg = error.message || "Failed to mark next action done";
         if (/next_action_completed_at/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
-          throw new Error(
-            "Completion tracking isn't in your database yet. Add a nullable timestamptz column on opportunities: next_action_completed_at."
+          // Completion tracking is optional (see SUPABASE_SCHEMA_CHECKLIST.md).
+          // Fall back to clearing the next action so it no longer shows as overdue.
+          const fallback = await supabase
+            .from("opportunities")
+            .update({ next_action: null, next_action_due: null })
+            .eq("id", id);
+
+          if (fallback.error) {
+            throw new Error(fallback.error.message || msg);
+          }
+
+          // Keep UI consistent with DB (no completion history available).
+          setRows((prev) =>
+            prev.map((r) =>
+              r.id === id
+                ? {
+                    ...r,
+                    next_action: null,
+                    next_action_due: null,
+                    next_action_completed_at: null,
+                    next_action_completed_by: null,
+                    next_action_completed_note: null,
+                  }
+                : r
+            )
           );
+
+          if (editOpen && editId === id) {
+            setEditNextAction("");
+            setEditNextActionDue("");
+            setEditNextActionCompletedAt("");
+            setEditCompletionNote("");
+          }
+
+          await fetchOpportunities();
+          alert(
+            "Marked as done (fallback). To enable completion history, run SUPABASE_SQL_next_action_completed_at.sql in Supabase (see SUPABASE_SCHEMA_CHECKLIST.md)."
+          );
+          return;
         }
 
         const isMissingMeta =

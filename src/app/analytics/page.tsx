@@ -54,7 +54,8 @@ export default function AnalyticsPage() {
               setError(null);
               const { data, error: err } = await supabase
                 .from("opportunities")
-                .select("id, stage, close_date, rolling_12m_value, probability, created_at, sales_person, accounts(name)");
+                // `sales_person` is an optional column (see SUPABASE_SCHEMA_CHECKLIST.md).
+                .select("id, stage, close_date, rolling_12m_value, probability, created_at, accounts(name)");
 
               if (err) throw err;
               
