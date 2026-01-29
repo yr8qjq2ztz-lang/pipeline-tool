@@ -1,5 +1,9 @@
 import { useEffect } from "react";
 
+const devError = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") console.error(...args);
+};
+
 interface KeyboardShortcuts {
   [key: string]: () => void;
 }
@@ -55,7 +59,7 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcuts) {
       window.addEventListener("keydown", handleKeyDown);
       return () => window.removeEventListener("keydown", handleKeyDown);
     } catch (error) {
-      console.error("Failed to attach keyboard shortcut listener:", error);
+      devError("Failed to attach keyboard shortcut listener:", error);
       return undefined;
     }
   }, [shortcuts]);

@@ -17,6 +17,10 @@ export interface DealTemplate {
 
 const STORAGE_KEY = "pipeline_deal_templates";
 
+const devError = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") console.error(...args);
+};
+
 export const DEFAULT_TEMPLATES: DealTemplate[] = [
   {
     id: "template_startup",
@@ -63,7 +67,7 @@ export function getTemplates(): DealTemplate[] {
     const parsed = JSON.parse(stored);
     // Validate parsed is array
     if (!Array.isArray(parsed)) {
-      console.error("DealTemplates: Invalid stored format, expected array");
+      devError("DealTemplates: Invalid stored format, expected array");
       return DEFAULT_TEMPLATES;
     }
 
@@ -87,7 +91,7 @@ export function getTemplates(): DealTemplate[] {
       ...validCustom,
     ];
   } catch (e) {
-    console.error("DealTemplates: Error reading from localStorage:", e);
+    devError("DealTemplates: Error reading from localStorage:", e);
     return DEFAULT_TEMPLATES;
   }
 }
@@ -99,29 +103,29 @@ export function createTemplate(
 ): DealTemplate | null {
   // Validate inputs
   if (!name || typeof name !== "string") {
-    console.error("DealTemplates: Template name is required");
+    devError("DealTemplates: Template name is required");
     return null;
   }
   if (!description || typeof description !== "string") {
-    console.error("DealTemplates: Template description is required");
+    devError("DealTemplates: Template description is required");
     return null;
   }
   if (!template || typeof template !== "object") {
-    console.error("DealTemplates: Invalid template object");
+    devError("DealTemplates: Invalid template object");
     return null;
   }
 
   // Validate template structure
   if (typeof template.probability !== "number" || template.probability < 0 || template.probability > 100) {
-    console.error("DealTemplates: Probability must be between 0 and 100");
+    devError("DealTemplates: Probability must be between 0 and 100");
     return null;
   }
   if (typeof template.estimatedValue !== "number" || template.estimatedValue < 0) {
-    console.error("DealTemplates: Estimated value must be positive");
+    devError("DealTemplates: Estimated value must be positive");
     return null;
   }
   if (!template.stage || typeof template.stage !== "string") {
-    console.error("DealTemplates: Stage is required");
+    devError("DealTemplates: Stage is required");
     return null;
   }
 
@@ -145,7 +149,7 @@ export function createTemplate(
     
     return newTemplate;
   } catch (e) {
-    console.error("DealTemplates: Error creating template:", e);
+    devError("DealTemplates: Error creating template:", e);
     return null;
   }
 }
@@ -153,13 +157,13 @@ export function createTemplate(
 export function deleteTemplate(id: string): boolean {
   // Validate input
   if (!id || typeof id !== "string") {
-    console.error("DealTemplates: Template ID is required");
+    devError("DealTemplates: Template ID is required");
     return false;
   }
 
   // Prevent deletion of default templates
   if (DEFAULT_TEMPLATES.find((d) => d.id === id)) {
-    console.error("DealTemplates: Cannot delete default templates");
+    devError("DealTemplates: Cannot delete default templates");
     return false;
   }
 
@@ -181,7 +185,7 @@ export function deleteTemplate(id: string): boolean {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(customToSave));
     return true;
   } catch (e) {
-    console.error("DealTemplates: Error deleting template:", e);
+    devError("DealTemplates: Error deleting template:", e);
     return false;
   }
 }

@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { getTemplates, type DealTemplate } from "@/lib/utils/dealTemplates";
 
+const devError = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") console.error(...args);
+};
+
 export interface DealTemplatesSelectorProps {
   onSelectTemplate: (template: DealTemplate) => void;
   onClose: () => void;
@@ -16,7 +20,7 @@ export function DealTemplatesSelector({
 
   // Validate callback functions exist
   if (!onSelectTemplate || !onClose) {
-    console.error("DealTemplatesSelector: Missing required callbacks");
+    devError("DealTemplatesSelector: Missing required callbacks");
     return null;
   }
 
@@ -41,19 +45,19 @@ export function DealTemplatesSelector({
   const handleSelect = () => {
     // Validate selectedId is not empty
     if (!selectedId || typeof selectedId !== "string") {
-      console.error("DealTemplatesSelector: Invalid template ID selected");
+      devError("DealTemplatesSelector: Invalid template ID selected");
       return;
     }
 
     const template = templates.find((t) => t && t.id === selectedId);
     if (!template) {
-      console.error("DealTemplatesSelector: Template not found for ID:", selectedId);
+      devError("DealTemplatesSelector: Template not found for ID:", selectedId);
       return;
     }
 
     // Validate template structure before passing
     if (!template.name || !template.stage || typeof template.probability !== "number") {
-      console.error("DealTemplatesSelector: Invalid template structure:", template);
+      devError("DealTemplatesSelector: Invalid template structure:", template);
       return;
     }
 
@@ -61,7 +65,7 @@ export function DealTemplatesSelector({
       onSelectTemplate(template);
       onClose();
     } catch (e) {
-      console.error("DealTemplatesSelector: Error selecting template:", e);
+      devError("DealTemplatesSelector: Error selecting template:", e);
     }
   };
 
@@ -94,7 +98,7 @@ export function DealTemplatesSelector({
                   <h3 className="font-semibold text-gray-900 dark:text-white">
                     {template.name}
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">
                     {template.description}
                   </p>
                 </div>
@@ -113,25 +117,25 @@ export function DealTemplatesSelector({
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4 text-xs">
                 <div>
-                  <span className="text-gray-600 dark:text-gray-400">Stage</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">Stage</span>
                   <div className="font-semibold text-gray-900 dark:text-white">
                     {template.stage}
                   </div>
                 </div>
                 <div>
-                  <span className="text-gray-600 dark:text-gray-400">Probability</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">Probability</span>
                   <div className="font-semibold text-gray-900 dark:text-white">
                     {template.probability}%
                   </div>
                 </div>
                 <div>
-                  <span className="text-gray-600 dark:text-gray-400">Est. Value</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">Est. Value</span>
                   <div className="font-semibold text-gray-900 dark:text-white">
                     ${(template.estimatedValue / 1000).toFixed(0)}k
                   </div>
                 </div>
                 <div>
-                  <span className="text-gray-600 dark:text-gray-400">Close Days</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">Close Days</span>
                   <div className="font-semibold text-gray-900 dark:text-white">
                     {template.daysToClose}d
                   </div>
@@ -144,7 +148,7 @@ export function DealTemplatesSelector({
         <div className="border-t border-gray-200 dark:border-slate-700 p-6 flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-600 transition"
+            className="flex-1 rounded-lg border border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-600 transition"
           >
             Cancel
           </button>

@@ -66,7 +66,9 @@ export function BulkActionsPanel({
       }
       onClose();
     } catch (error) {
-      console.error("Bulk action failed:", error);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Bulk action failed:", error);
+      }
       alert("Action failed. Please try again.");
     } finally {
       setLoading(false);
@@ -81,7 +83,7 @@ export function BulkActionsPanel({
         </h3>
         <button
           onClick={onClose}
-          className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+          className="text-slate-600 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white"
         >
           ✕
         </button>
@@ -105,7 +107,7 @@ export function BulkActionsPanel({
                 setSelectedAction(value);
               }
             }}
-            className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+            className="w-full rounded-lg border border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100"
           >
             <option value="">Select an action...</option>
             <option value="updateStage">Update Stage</option>
@@ -122,7 +124,7 @@ export function BulkActionsPanel({
             <select
               value={selectedStage}
               onChange={(e) => setSelectedStage(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+              className="w-full rounded-lg border border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100"
             >
               <option value="">Choose stage...</option>
               {STAGES.map((s) => (
@@ -144,7 +146,7 @@ export function BulkActionsPanel({
               value={selectedBranch}
               onChange={(e) => setSelectedBranch(e.target.value)}
               placeholder="Branch ID"
-              className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+              className="w-full rounded-lg border border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100"
             />
           </div>
         )}
@@ -159,7 +161,7 @@ export function BulkActionsPanel({
       <div className="flex gap-2 pt-2">
         <button
           onClick={onClose}
-          className="flex-1 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-600 transition"
+          className="flex-1 rounded-lg border border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-600 transition"
         >
           Cancel
         </button>

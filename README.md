@@ -15,6 +15,8 @@ Next.js 16 + React 19 sales pipeline management app using Supabase Auth + Supaba
 	- `NEXT_PUBLIC_SUPABASE_URL`
 	- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 	- `NEXT_PUBLIC_DEMO_MODE` (optional)
+	- `OPENAI_API_KEY` (optional: enables AI vehicle recommendations)
+	- `OPENAI_MODEL` (optional: defaults to `gpt-4o-mini`)
 
 3. Run the app
 
@@ -42,3 +44,4 @@ After that, every `git push` to `main` triggers a cloud build + deploy.
 
 - Feature guide: `QUICK_START.md`
 - Robustness notes: `ROBUSTNESS.md`
+- Supabase schema checklist + migrations: `SUPABASE_SCHEMA_CHECKLIST.md`

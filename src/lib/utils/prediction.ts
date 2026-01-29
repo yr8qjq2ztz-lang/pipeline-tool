@@ -3,6 +3,10 @@
  * Analyzes deals and predicts closure likelihood based on multiple factors
  */
 
+const devError = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") console.error(...args);
+};
+
 export interface DealScoreFactors {
   ageInDays: number;
   daysToClose: number;
@@ -24,7 +28,7 @@ export interface PredictionScore {
 export function calculatePredictionScore(factors: DealScoreFactors): PredictionScore {
   // Validate input factors
   if (!factors || typeof factors !== "object") {
-    console.error("Prediction: Invalid factors object");
+    devError("Prediction: Invalid factors object");
     return {
       closureLikelihood: 0,
       riskFactors: ["Invalid deal data"],
@@ -125,8 +129,8 @@ export function calculatePredictionScore(factors: DealScoreFactors): PredictionS
 export function getScoreColor(score: number): string {
   // Validate score input
   if (!Number.isFinite(score)) {
-    console.error("Prediction: Invalid score for color:", score);
-    return "text-gray-600 dark:text-gray-400";
+    devError("Prediction: Invalid score for color:", score);
+    return "text-slate-700 dark:text-slate-200";
   }
   const normalizedScore = Math.max(0, Math.min(100, score));
   
@@ -139,8 +143,8 @@ export function getScoreColor(score: number): string {
 export function getScoreBgColor(score: number): string {
   // Validate score input
   if (!Number.isFinite(score)) {
-    console.error("Prediction: Invalid score for bg color:", score);
-    return "bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-900";
+    devError("Prediction: Invalid score for bg color:", score);
+    return "bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800";
   }
   const normalizedScore = Math.max(0, Math.min(100, score));
   
@@ -153,7 +157,7 @@ export function getScoreBgColor(score: number): string {
 export function getScoreBadge(score: number): string {
   // Validate score input
   if (!Number.isFinite(score)) {
-    console.error("Prediction: Invalid score for badge:", score);
+    devError("Prediction: Invalid score for badge:", score);
     return "⚪ Unknown";
   }
   const normalizedScore = Math.max(0, Math.min(100, score));

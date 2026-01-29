@@ -6,6 +6,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 type SearchParams = {
   branch?: string; // we'll use branch UUID here
+  salesPerson?: string;
 };
 
 type Branch = { id: string; name: string };
@@ -13,11 +14,13 @@ type Branch = { id: string; name: string };
 type Opportunity = {
   id: string;
   branch_id: string | null;
+  sales_person?: string | null;
   stage: string | null;
   close_date: string | null;
   rolling_12m_value: number | null;
   probability: number | null;
   next_action_due: string | null;
+  next_action_completed_at?: string | null;
   created_at: string | null;
   accounts?: { id: string; name: string | null }[] | null;
   branches?: { id: string; name: string | null }[] | null;
@@ -39,6 +42,7 @@ export default async function DashboardPage({
   try {
     const params = await searchParams;
     const selectedBranchId = params.branch && params.branch !== "All" ? params.branch : "All";
+    const selectedSalesPerson = params.salesPerson && params.salesPerson !== "All" ? params.salesPerson : "All";
 
     const supabase = await supabaseServer();
 
@@ -57,10 +61,14 @@ export default async function DashboardPage({
   // Pull opportunities with account and branch data for consistency with pipeline
   let q = supabase
     .from("opportunities")
-    .select("id, branch_id, stage, close_date, rolling_12m_value, probability, next_action_due, created_at, accounts(id, name), branches(id, name)");
+    .select("id, branch_id, sales_person, stage, close_date, rolling_12m_value, probability, next_action_due, next_action_completed_at, created_at, accounts(id, name), branches(id, name)");
 
   if (selectedBranchId !== "All") {
     q = q.eq("branch_id", selectedBranchId);
+  }
+
+  if (selectedSalesPerson !== "All") {
+    q = q.eq("sales_person", selectedSalesPerson);
   }
 
   const res = await q;
@@ -69,6 +77,14 @@ export default async function DashboardPage({
   }
 
     const data = (res.data ?? []) as Opportunity[];
+
+  const salesPeople = Array.from(
+    new Set(
+      data
+        .map((r) => String(r.sales_person ?? "").trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b));
 
   const now = new Date();
   const in30 = new Date(now);
@@ -117,6 +133,7 @@ export default async function DashboardPage({
 
     const closeDate = r.close_date ? new Date(r.close_date) : null;
     const nextDue = r.next_action_due ? new Date(r.next_action_due) : null;
+    const isNextActionCompleted = Boolean(r.next_action_completed_at);
     const createdAt = r.created_at ? new Date(r.created_at) : null;
 
     const value = r.rolling_12m_value == null ? 0 : Number(r.rolling_12m_value);
@@ -133,7 +150,7 @@ export default async function DashboardPage({
       // “Stale” rule (simple + useful):
       // - next action overdue OR
       // - no next action and created > 30 days ago
-      if (nextDue && nextDue < now) {
+      if (!isNextActionCompleted && nextDue && nextDue < now) {
         overdueActions += 1;
         stale += 1;
       } else if (!nextDue && createdAt) {
@@ -148,7 +165,7 @@ export default async function DashboardPage({
     existing.weighted += weighted;
     stageMap.set(stage, existing);
 
-    // 12-month forecast chart (open-only, uses close_date)
+    // 12 MTH forecast chart (open-only, uses close_date)
     if (!isClosed && closeDate) {
       const mk = monthKey(closeDate);
       const idx = monthIndex.get(mk);
@@ -166,7 +183,7 @@ export default async function DashboardPage({
     .filter((r) => {
       const nextDue = r.next_action_due ? new Date(r.next_action_due) : null;
       const stage = r.stage ?? "";
-      return !CLOSED.has(stage) && nextDue && nextDue < now;
+      return !CLOSED.has(stage) && !r.next_action_completed_at && nextDue && nextDue < now;
     })
     .slice(0, 5) // top 5
     .map((r) => ({
@@ -182,6 +199,8 @@ export default async function DashboardPage({
         branches={dropdownBranches}
         selectedBranchId={selectedBranchId}
         selectedBranchLabel={branchNameById.get(selectedBranchId) ?? (selectedBranchId === "All" ? "All" : shortId(selectedBranchId))}
+        salesPeople={["All", ...salesPeople]}
+        selectedSalesPerson={selectedSalesPerson}
         kpis={{
           openCount,
           weightedPipeline,

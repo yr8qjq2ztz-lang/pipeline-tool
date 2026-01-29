@@ -22,7 +22,9 @@ export default function Home() {
           try {
             router.replace(session ? "/pipeline" : "/login");
           } catch (e) {
-            console.error("Navigation error:", e);
+            if (process.env.NODE_ENV !== "production") {
+              console.error("Navigation error:", e);
+            }
             setError("Failed to navigate. Please refresh the page.");
           }
         }
@@ -31,7 +33,9 @@ export default function Home() {
 
       unsubscribe = () => sub.subscription.unsubscribe();
     } catch (e) {
-      console.error("Auth initialization error:", e);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Auth initialization error:", e);
+      }
       queueMicrotask(() => {
         setError("Failed to initialize authentication.");
         setReady(true);

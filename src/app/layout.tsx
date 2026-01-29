@@ -30,7 +30,7 @@ export default function RootLayout({
   const demoModeEnabled = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en-NZ" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased transition-colors duration-300 bg-white dark:bg-slate-950 text-black dark:text-white`}
       >

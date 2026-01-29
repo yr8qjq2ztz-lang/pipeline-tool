@@ -13,6 +13,10 @@ import {
   Line,
 } from "recharts";
 
+const devError = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") console.error(...args);
+};
+
 function money(n: number) {
   return new Intl.NumberFormat("en-NZ", {
     style: "currency",
@@ -21,10 +25,24 @@ function money(n: number) {
   }).format(n || 0);
 }
 
+function formatNZDate(iso: string) {
+  if (!iso) return "";
+  // Expecting YYYY-MM-DD from Postgres date
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-NZ", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
+}
+
 export default function DashboardClient({
   branches,
   selectedBranchId,
   selectedBranchLabel,
+  salesPeople,
+  selectedSalesPerson,
   kpis,
   charts,
   atRiskDeals = [],
@@ -32,6 +50,8 @@ export default function DashboardClient({
   branches: { id: string; name: string }[];
   selectedBranchId: string;
   selectedBranchLabel: string;
+  salesPeople: string[];
+  selectedSalesPerson: string;
   kpis: {
     openCount: number;
     weightedPipeline: number;
@@ -56,7 +76,7 @@ export default function DashboardClient({
   if (!branches?.length) {
     return (
       <div className="p-6 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
-        <div className="text-center text-gray-600">
+        <div className="text-center text-slate-700">
           <p>No branches available. Please check your database configuration.</p>
         </div>
       </div>
@@ -67,17 +87,34 @@ export default function DashboardClient({
     try {
       router.push("/pipeline");
     } catch (error) {
-      console.error("Navigation failed:", error);
+      devError("Navigation failed:", error);
       alert("Failed to navigate to pipeline. Please try again.");
     }
   };
 
   const handleBranchChange = (id: string) => {
     try {
-      router.push(id === "All" ? "/dashboard" : `/dashboard?branch=${encodeURIComponent(id)}`);
+      const params = new URLSearchParams();
+      if (id !== "All") params.set("branch", id);
+      if (selectedSalesPerson !== "All") params.set("salesPerson", selectedSalesPerson);
+      const qs = params.toString();
+      router.push(qs ? `/dashboard?${qs}` : "/dashboard");
     } catch (error) {
-      console.error("Navigation failed:", error);
+      devError("Navigation failed:", error);
       alert("Failed to change branch. Please try again.");
+    }
+  };
+
+  const handleSalesPersonChange = (sp: string) => {
+    try {
+      const params = new URLSearchParams();
+      if (selectedBranchId !== "All") params.set("branch", selectedBranchId);
+      if (sp !== "All") params.set("salesPerson", sp);
+      const qs = params.toString();
+      router.push(qs ? `/dashboard?${qs}` : "/dashboard");
+    } catch (error) {
+      devError("Navigation failed:", error);
+      alert("Failed to change sales person. Please try again.");
     }
   };
 
@@ -87,14 +124,19 @@ export default function DashboardClient({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">Dashboard</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Branch: <span className="font-semibold text-gray-800">{selectedBranchLabel}</span>
+          <p className="text-sm text-slate-700 mt-1">
+            Branch: <span className="font-semibold text-slate-900">{selectedBranchLabel}</span>
+            {selectedSalesPerson !== "All" ? (
+              <>
+                {" "}· Sales person: <span className="font-semibold text-slate-900">{selectedSalesPerson}</span>
+              </>
+            ) : null}
           </p>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-700">Branch</span>
+            <span className="text-sm font-semibold text-slate-800">Branch</span>
             <select
               className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all cursor-pointer hover:border-gray-400"
               value={selectedBranchId}
@@ -103,6 +145,21 @@ export default function DashboardClient({
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-800">Sales person</span>
+            <select
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all cursor-pointer hover:border-gray-400"
+              value={selectedSalesPerson}
+              onChange={(e) => handleSalesPersonChange(e.target.value)}
+            >
+              {salesPeople.map((sp) => (
+                <option key={sp} value={sp}>
+                  {sp}
                 </option>
               ))}
             </select>
@@ -135,7 +192,7 @@ export default function DashboardClient({
       {/* KPI Tiles */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Tile title="Open opportunities" value={String(kpis.openCount)} color="blue" />
-        <Tile title="Weighted pipeline (12m)" value={money(kpis.weightedPipeline)} color="green" />
+        <Tile title="Weighted pipeline (12 MTH)" value={money(kpis.weightedPipeline)} color="green" />
         <Tile title="Closing in 30 days" value={String(kpis.closing30)} color="amber" />
         <Tile title="Stale deals" value={String(kpis.stale)} color="orange" />
         <Tile title="Overdue actions" value={String(kpis.overdueActions)} color="red" />
@@ -154,11 +211,11 @@ export default function DashboardClient({
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-semibold text-gray-900">{deal.accountName}</div>
-                    <div className="text-xs text-gray-600">Stage: {deal.stage} · Due: {deal.dueDate}</div>
+                    <div className="text-xs font-medium text-slate-700">Stage: {deal.stage} · Due: {formatNZDate(deal.dueDate)}</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-semibold text-gray-900">${(Number(deal.value) / 1000).toFixed(1)}k</div>
-                    <div className="text-xs text-gray-600">{deal.probability}% prob</div>
+                    <div className="text-xs font-medium text-slate-700">{deal.probability}% prob</div>
                   </div>
                 </div>
               </div>
@@ -183,7 +240,7 @@ export default function DashboardClient({
           </div>
         </Card>
 
-        <Card title="12-month rolling forecast (weighted value)">
+        <Card title="12 MTH rolling forecast (weighted value)">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={charts.months}>
@@ -211,24 +268,24 @@ function Tile({ title, value, color = "blue" }: { title: string; value: string; 
   };
 
   const textMap = {
-    blue: "text-blue-700",
-    green: "text-green-700",
-    amber: "text-amber-700",
-    orange: "text-orange-700",
-    red: "text-red-700",
+    blue: "text-blue-800",
+    green: "text-green-800",
+    amber: "text-amber-800",
+    orange: "text-orange-800",
+    red: "text-red-800",
   };
 
   const darkTextMap = {
-    blue: "text-blue-900",
-    green: "text-green-900",
-    amber: "text-amber-900",
-    orange: "text-orange-900",
-    red: "text-red-900",
+    blue: "text-slate-950",
+    green: "text-slate-950",
+    amber: "text-slate-950",
+    orange: "text-slate-950",
+    red: "text-slate-950",
   };
 
   return (
     <div className={`rounded-2xl border ${colorMap[color]} p-5 shadow-sm hover:shadow-md transition-shadow`}>
-      <div className={`text-sm font-medium ${textMap[color]}`}>{title}</div>
+      <div className={`text-sm font-semibold ${textMap[color]}`}>{title}</div>
       <div className={`mt-2 text-3xl font-bold ${darkTextMap[color]}`}>{value}</div>
     </div>
   );
@@ -236,8 +293,8 @@ function Tile({ title, value, color = "blue" }: { title: string; value: string; 
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
-      <div className="text-sm font-semibold text-gray-800">{title}</div>
+    <div className="rounded-2xl border border-slate-300 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+      <div className="text-sm font-semibold text-slate-900">{title}</div>
       <div className="mt-4">{children}</div>
     </div>
   );

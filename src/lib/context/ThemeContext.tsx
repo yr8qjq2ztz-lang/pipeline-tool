@@ -11,6 +11,10 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const devError = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") console.error(...args);
+};
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === "undefined") return "light";
@@ -47,7 +51,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         console.warn("localStorage not available, theme won't persist");
       }
     } catch (error) {
-      console.error("Failed to apply theme:", error);
+      devError("Failed to apply theme:", error);
     }
   }
 

@@ -22,6 +22,14 @@ type OpportunityRow = {
   probability: number | null;
   next_action: string | null;
   next_action_due: string | null;
+  next_action_completed_at?: string | null;
+  next_action_completed_by?: string | null;
+  next_action_completed_note?: string | null;
+  owner_user_id?: string | null;
+  sales_person?: string | null;
+  battery_solution?: string | null;
+  vehicle_brand?: string | null;
+  vehicle_model?: string | null;
   notes: string | null;
 
   accounts?: { id: string; name: string } | null;
@@ -35,6 +43,17 @@ const STAGES = [
   "Negotiation",
   "Won",
   "Lost",
+] as const;
+
+const BATTERY_SOLUTIONS = [
+  "Automotive",
+  "Commercial Vehicles and Fleets",
+  "OEM",
+  "Marine",
+  "Deep Cycle",
+  "Industrial",
+  "Energy Storage",
+  "Mixed",
 ] as const;
 
 type CloseWindow = "all" | "next30" | "next60" | "past";
@@ -70,6 +89,36 @@ function isoToDate(iso: string | null): Date | null {
   const d = new Date(iso + "T00:00:00");
   return Number.isNaN(d.getTime()) ? null : d;
 }
+
+function formatISODateOnly(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatNZDate(iso: string | null | undefined): string {
+  const d = isoToDate(iso ?? null);
+  if (!d) return "-";
+  return new Intl.DateTimeFormat("en-NZ", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
+}
+
+function formatNZDateTime(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  return new Intl.DateTimeFormat("en-NZ", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
 function startOfDay(d: Date): Date {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -95,6 +144,9 @@ export default function PipelinePage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [rows, setRows] = useState<OpportunityRow[]>([]);
 
+  const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>("");
+
   // View mode: Board vs Table
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
 
@@ -115,6 +167,13 @@ export default function PipelinePage() {
   const [createProbability, setCreateProbability] = useState<string>("10");
   const [createNextAction, setCreateNextAction] = useState<string>("");
   const [createNextActionDue, setCreateNextActionDue] = useState<string>("");
+  const [createSalesPerson, setCreateSalesPerson] = useState<string>("");
+  const [createBatterySolution, setCreateBatterySolution] = useState<string>("");
+  const [createVehicleBrand, setCreateVehicleBrand] = useState<string>("");
+  const [createVehicleModel, setCreateVehicleModel] = useState<string>("");
+  const [createVehicleSuggestion, setCreateVehicleSuggestion] = useState<string>("");
+  const [creatingVehicleSuggestion, setCreatingVehicleSuggestion] = useState<boolean>(false);
+  const [createVehicleSuggestionError, setCreateVehicleSuggestionError] = useState<string | null>(null);
   const [createNotes, setCreateNotes] = useState<string>("");
 
   // ---- Edit modal state ----
@@ -132,18 +191,51 @@ export default function PipelinePage() {
   const [editProbability, setEditProbability] = useState<string>("10");
   const [editNextAction, setEditNextAction] = useState<string>("");
   const [editNextActionDue, setEditNextActionDue] = useState<string>("");
+  const [editNextActionCompletedAt, setEditNextActionCompletedAt] = useState<string>("");
+  const [editCompletionNote, setEditCompletionNote] = useState<string>("");
+  const [editOriginalNextAction, setEditOriginalNextAction] = useState<string>("");
+  const [editOriginalNextActionDue, setEditOriginalNextActionDue] = useState<string>("");
+  const [editOwnerUserId, setEditOwnerUserId] = useState<string>("");
+  const [editSalesPerson, setEditSalesPerson] = useState<string>("");
+  const [editBatterySolution, setEditBatterySolution] = useState<string>("");
+  const [editVehicleBrand, setEditVehicleBrand] = useState<string>("");
+  const [editVehicleModel, setEditVehicleModel] = useState<string>("");
+  const [editVehicleSuggestion, setEditVehicleSuggestion] = useState<string>("");
+  const [editingVehicleSuggestion, setEditingVehicleSuggestion] = useState<boolean>(false);
+  const [editVehicleSuggestionError, setEditVehicleSuggestionError] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState<string>("");
 
   // quick update UI state
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
+  const [nextActionSavingId, setNextActionSavingId] = useState<string | null>(null);
 
   // ---- Filters ----
   const [filterBranchId, setFilterBranchId] = useState<string>(""); // "" = All
   const [filterStage, setFilterStage] = useState<string>(""); // "" = All
+  const [filterSalesPerson, setFilterSalesPerson] = useState<string>(""); // "" = All
+  const [filterBatterySolution, setFilterBatterySolution] = useState<string>(""); // "" = All
+  const [filterOwner, setFilterOwner] = useState<"all" | "mine">("all");
   const [filterCloseWindow, setFilterCloseWindow] = useState<CloseWindow>("all");
   const [filterProbBand, setFilterProbBand] = useState<ProbBand>("all");
   const [filterHealth, setFilterHealth] = useState<Health>("all");
   const [search, setSearch] = useState<string>("");
+
+  const ownerFieldAvailable = useMemo(() => {
+    return rows.some((r) => Object.prototype.hasOwnProperty.call(r, "owner_user_id"));
+  }, [rows]);
+
+  useEffect(() => {
+    if (!ownerFieldAvailable && filterOwner !== "all") setFilterOwner("all");
+  }, [ownerFieldAvailable, filterOwner]);
+
+  const salesPeople = useMemo(() => {
+    const uniq = new Set<string>();
+    for (const r of rows) {
+      const sp = String(r.sales_person ?? "").trim();
+      if (sp) uniq.add(sp);
+    }
+    return Array.from(uniq).sort((a, b) => a.localeCompare(b));
+  }, [rows]);
 
   const accountNameToId = useMemo(() => {
     const map = new Map<string, string>();
@@ -217,9 +309,7 @@ export default function PipelinePage() {
         .select("*, accounts(id, name), branches(id, name)");
 
       if (error) throw new Error(error.message || "Failed to fetch opportunities");
-      
-      const count = data?.length ?? 0;
-      console.log("Fetched opportunities, count:", count);
+
       setRows((data ?? []) as OpportunityRow[]);
     } catch (e) {
       console.error("Failed to fetch opportunities:", e);
@@ -270,6 +360,8 @@ export default function PipelinePage() {
       }
 
       try {
+        setCurrentUserId(session?.user?.id ?? "");
+        setCurrentUserEmail(session?.user?.email ?? "");
         setDbError(null);
         setLoading(true);
         await Promise.all([fetchBranches(), fetchAccounts(), fetchOpportunities()]);
@@ -328,7 +420,87 @@ export default function PipelinePage() {
     setCreateProbability("10");
     setCreateNextAction("");
     setCreateNextActionDue("");
+    setCreateSalesPerson("");
+    setCreateBatterySolution("");
+    setCreateVehicleBrand("");
+    setCreateVehicleModel("");
+    setCreateVehicleSuggestion("");
+    setCreateVehicleSuggestionError(null);
     setCreateNotes("");
+  }
+
+  async function suggestVehicleSolutionForCreate() {
+    setCreateVehicleSuggestionError(null);
+    setCreateVehicleSuggestion("");
+
+    const brand = createVehicleBrand.trim();
+    const model = createVehicleModel.trim();
+    if (!brand || !model) {
+      setCreateVehicleSuggestionError("Please enter both vehicle brand and model first.");
+      return;
+    }
+
+    try {
+      setCreatingVehicleSuggestion(true);
+      const res = await fetch("/api/battery-recommendation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batterySolution: createBatterySolution,
+          brand,
+          model,
+          market: "NZ",
+        }),
+      });
+
+      const json = (await res.json()) as { recommendation?: string; error?: string };
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to generate recommendation");
+      }
+
+      setCreateVehicleSuggestion(String(json.recommendation ?? ""));
+    } catch (e: unknown) {
+      setCreateVehicleSuggestionError(getErrorMessage(e));
+    } finally {
+      setCreatingVehicleSuggestion(false);
+    }
+  }
+
+  async function suggestVehicleSolutionForEdit() {
+    setEditVehicleSuggestionError(null);
+    setEditVehicleSuggestion("");
+
+    const brand = editVehicleBrand.trim();
+    const model = editVehicleModel.trim();
+    if (!brand || !model) {
+      setEditVehicleSuggestionError("Please enter both vehicle brand and model first.");
+      return;
+    }
+
+    try {
+      setEditingVehicleSuggestion(true);
+      const res = await fetch("/api/battery-recommendation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batterySolution: editBatterySolution,
+          brand,
+          model,
+          market: "NZ",
+        }),
+      });
+
+      const json = (await res.json()) as { recommendation?: string; error?: string };
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to generate recommendation");
+      }
+
+      setEditVehicleSuggestion(String(json.recommendation ?? ""));
+    } catch (e: unknown) {
+      setEditVehicleSuggestionError(getErrorMessage(e));
+    } finally {
+      setEditingVehicleSuggestion(false);
+    }
   }
 
   async function onCreateOpportunity(e: React.FormEvent) {
@@ -353,7 +525,7 @@ export default function PipelinePage() {
 
       const valueNum = Number(createRolling12mValue);
       if (Number.isNaN(valueNum) || valueNum < 0) {
-        throw new Error("Rolling 12M value must be a number >= 0.");
+        throw new Error("Rolling 12 MTH value must be a number >= 0.");
       }
 
       const probNum = Number(createProbability);
@@ -365,7 +537,7 @@ export default function PipelinePage() {
         throw new Error("Close date cannot be in the past");
       }
 
-      const { error } = await supabase.from("opportunities").insert({
+      const insertBase = {
         account_id: acctId,
         branch_id: createBranchId || null,
         stage: createStage,
@@ -374,10 +546,50 @@ export default function PipelinePage() {
         probability: probNum,
         next_action: createNextAction.trim() || null,
         next_action_due: createNextActionDue || null,
+        next_action_completed_at: null,
+        ...(createSalesPerson.trim() ? { sales_person: createSalesPerson.trim() } : {}),
+        ...(createBatterySolution.trim() ? { battery_solution: createBatterySolution.trim() } : {}),
+        ...(createBatterySolution === "Commercial Vehicles and Fleets" && createVehicleBrand.trim()
+          ? { vehicle_brand: createVehicleBrand.trim() }
+          : {}),
+        ...(createBatterySolution === "Commercial Vehicles and Fleets" && createVehicleModel.trim()
+          ? { vehicle_model: createVehicleModel.trim() }
+          : {}),
         notes: createNotes.trim() || null,
-      });
+      } as Record<string, unknown>;
 
-      if (error) throw new Error(error.message || "Failed to create opportunity");
+      const insertWithOwner =
+        currentUserId ? { ...insertBase, owner_user_id: currentUserId } : insertBase;
+
+      let { error } = await supabase.from("opportunities").insert(insertWithOwner);
+
+      if (error) {
+        const msg = error.message || "Failed to create opportunity";
+
+        const missingOwner =
+          /owner_user_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
+        if (missingOwner && currentUserId) {
+          console.warn("owner_user_id column missing; creating opportunity without owner assignment.");
+          const retry = await supabase.from("opportunities").insert(insertBase);
+          error = retry.error;
+        }
+
+        if (!error) {
+          // retry succeeded
+        } else {
+        if (/sales_person/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Sales person field isn't in your database yet. Add a nullable text column on opportunities: sales_person."
+          );
+        }
+        if (/battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution."
+          );
+        }
+          throw new Error(error.message || msg);
+        }
+      }
 
       await Promise.all([fetchAccounts(), fetchOpportunities()]);
       resetCreateForm();
@@ -401,8 +613,132 @@ export default function PipelinePage() {
     setEditProbability(String(row.probability ?? 0));
     setEditNextAction(row.next_action ?? "");
     setEditNextActionDue(row.next_action_due ?? "");
+    setEditNextActionCompletedAt(String(row.next_action_completed_at ?? ""));
+    setEditCompletionNote("");
+    setEditOriginalNextAction(row.next_action ?? "");
+    setEditOriginalNextActionDue(row.next_action_due ?? "");
+    setEditOwnerUserId(String(row.owner_user_id ?? ""));
+    setEditSalesPerson(String(row.sales_person ?? ""));
+    setEditBatterySolution(String(row.battery_solution ?? ""));
+    setEditVehicleBrand(String(row.vehicle_brand ?? ""));
+    setEditVehicleModel(String(row.vehicle_model ?? ""));
+    setEditVehicleSuggestion("");
+    setEditVehicleSuggestionError(null);
     setEditNotes(row.notes ?? "");
     setEditOpen(true);
+  }
+
+  async function snoozeNextAction(id: string, days: number) {
+    const ok = await ensureSignedInOrBounce();
+    if (!ok) return;
+
+    if (!Number.isFinite(days) || days <= 0) return;
+
+    const current = rows.find((r) => r.id === id);
+    if (!current) return;
+    if (current.next_action_completed_at) {
+      alert("This next action is already completed.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Snooze this next action by ${days} day(s)?`);
+    if (!confirmed) return;
+
+    try {
+      setNextActionSavingId(id);
+
+      const base = isoToDate(current.next_action_due) ?? startOfDay(new Date());
+      const nextDue = formatISODateOnly(addDays(base, days));
+
+      // optimistic UI
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, next_action_due: nextDue } : r)));
+      if (editOpen && editId === id) setEditNextActionDue(nextDue);
+
+      const { error } = await supabase
+        .from("opportunities")
+        .update({ next_action_due: nextDue })
+        .eq("id", id);
+
+      if (error) throw new Error(error.message || "Failed to snooze next action");
+    } catch (e: unknown) {
+      console.error("Snooze failed:", e);
+      await fetchOpportunities();
+      alert(getErrorMessage(e));
+    } finally {
+      setNextActionSavingId(null);
+    }
+  }
+
+  async function reopenNextAction(id: string) {
+    const ok = await ensureSignedInOrBounce();
+    if (!ok) return;
+
+    const current = rows.find((r) => r.id === id);
+    if (!current) return;
+    if (!current.next_action_completed_at) return;
+
+    const confirmed = window.confirm("Reopen this next action? It will return to overdue/due lists if applicable.");
+    if (!confirmed) return;
+
+    try {
+      setNextActionSavingId(id);
+
+      // optimistic UI
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                next_action_completed_at: null,
+                next_action_completed_by: null,
+                next_action_completed_note: null,
+              }
+            : r
+        )
+      );
+
+      if (editOpen && editId === id) {
+        setEditNextActionCompletedAt("");
+        setEditCompletionNote("");
+      }
+
+      const fullUpdate = {
+        next_action_completed_at: null,
+        next_action_completed_by: null,
+        next_action_completed_note: null,
+      } as Record<string, unknown>;
+
+      let { error } = await supabase.from("opportunities").update(fullUpdate).eq("id", id);
+
+      if (error) {
+        const msg = error.message || "Failed to reopen next action";
+        if (/next_action_completed_at/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Completion tracking isn't in your database yet. Add a nullable timestamptz column on opportunities: next_action_completed_at."
+          );
+        }
+
+        const isMissingMeta =
+          (/next_action_completed_by/i.test(msg) || /next_action_completed_note/i.test(msg)) &&
+          /(does not exist|unknown column|column)/i.test(msg);
+
+        if (isMissingMeta) {
+          const retry = await supabase
+            .from("opportunities")
+            .update({ next_action_completed_at: null })
+            .eq("id", id);
+          error = retry.error;
+        }
+
+        if (error) throw new Error(error.message || msg);
+      }
+    } catch (e: unknown) {
+      console.error("Reopen failed:", e);
+      await fetchOpportunities();
+      alert(getErrorMessage(e));
+    } finally {
+      setNextActionSavingId(null);
+    }
   }
 
   async function saveEdit(e: React.FormEvent) {
@@ -422,7 +758,7 @@ export default function PipelinePage() {
 
       const valueNum = Number(editRolling12mValue);
       if (Number.isNaN(valueNum) || valueNum < 0) {
-        throw new Error("Rolling 12M value must be a number >= 0.");
+        throw new Error("Rolling 12 MTH value must be a number >= 0.");
       }
 
       const probNum = Number(editProbability);
@@ -434,21 +770,86 @@ export default function PipelinePage() {
         throw new Error("Close date cannot be in the past");
       }
 
-      const { error } = await supabase
-        .from("opportunities")
-        .update({
-          branch_id: editBranchId || null,
-          stage: editStage,
-          close_date: editCloseDate || null,
-          rolling_12m_value: valueNum,
-          probability: probNum,
-          next_action: editNextAction.trim() || null,
-          next_action_due: editNextActionDue || null,
-          notes: editNotes.trim() || null,
-        })
-        .eq("id", editId);
+      const norm = (s: string) => (s ?? "").trim() || null;
+      const normDate = (s: string) => (s ?? "").trim() || null;
 
-      if (error) throw new Error(error.message || "Failed to update opportunity");
+      const nextAction = norm(editNextAction);
+      const nextActionDue = normDate(editNextActionDue);
+
+      const originalNextAction = norm(editOriginalNextAction);
+      const originalNextActionDue = normDate(editOriginalNextActionDue);
+
+      const nextActionChanged =
+        nextAction !== originalNextAction || nextActionDue !== originalNextActionDue;
+
+      // If the next action changes (or is cleared), we clear completion; otherwise preserve it.
+      const nextActionCompletedAt =
+        !nextAction && !nextActionDue
+          ? null
+          : nextActionChanged
+            ? null
+            : normDate(editNextActionCompletedAt);
+
+      const isCommercialFleet = editBatterySolution.trim() === "Commercial Vehicles and Fleets";
+
+      const updateBase = {
+        branch_id: editBranchId || null,
+        stage: editStage,
+        close_date: editCloseDate || null,
+        rolling_12m_value: valueNum,
+        probability: probNum,
+        next_action: nextAction,
+        next_action_due: nextActionDue,
+        next_action_completed_at: nextActionCompletedAt,
+        ...(editSalesPerson.trim() ? { sales_person: editSalesPerson.trim() } : { sales_person: null }),
+        ...(editBatterySolution.trim()
+          ? { battery_solution: editBatterySolution.trim() }
+          : { battery_solution: null }),
+        ...(isCommercialFleet
+          ? {
+              vehicle_brand: editVehicleBrand.trim() || null,
+              vehicle_model: editVehicleModel.trim() || null,
+            }
+          : {
+              vehicle_brand: null,
+              vehicle_model: null,
+            }),
+        notes: editNotes.trim() || null,
+      } as Record<string, unknown>;
+
+      const updateWithOwner = ownerFieldAvailable
+        ? { ...updateBase, owner_user_id: editOwnerUserId.trim() || null }
+        : updateBase;
+
+      let { error } = await supabase.from("opportunities").update(updateWithOwner).eq("id", editId);
+
+      if (error) {
+        const msg = error.message || "Failed to update opportunity";
+        if (/sales_person/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Sales person field isn't in your database yet. Add a nullable text column on opportunities: sales_person."
+          );
+        }
+        if (/battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution."
+          );
+        }
+
+        if (/next_action_completed_at/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Completion tracking isn't in your database yet. Add a nullable timestamptz column on opportunities: next_action_completed_at."
+          );
+        }
+
+        const missingOwner = /owner_user_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
+        if (missingOwner && ownerFieldAvailable) {
+          const retry = await supabase.from("opportunities").update(updateBase).eq("id", editId);
+          error = retry.error;
+        }
+
+        if (error) throw new Error(error.message || msg);
+      }
 
       await fetchOpportunities();
       setEditOpen(false);
@@ -508,21 +909,15 @@ export default function PipelinePage() {
       setSavingEdit(true);
       setEditError(null);
 
-      console.log("Attempting to delete opportunity:", id);
-      
       const response = await supabase
         .from("opportunities")
         .delete()
         .eq("id", id);
 
-      console.log("Delete response:", response);
-
       if (response.error) {
         console.error("Delete error from Supabase:", response.error);
         throw new Error(response.error.message || "Failed to delete - RLS policy may be blocking");
       }
-
-      console.log("Delete API call succeeded, now fetching...");
       
       // Wait and refresh to confirm deletion persisted
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -553,16 +948,32 @@ export default function PipelinePage() {
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const sp = filterSalesPerson.trim().toLowerCase();
+    const bs = filterBatterySolution.trim().toLowerCase();
 
     return rows.filter((r) => {
       if (filterBranchId && r.branch_id !== filterBranchId) return false;
       if (filterStage && (r.stage ?? "") !== filterStage) return false;
 
+      if (ownerFieldAvailable && filterOwner === "mine") {
+        if (!currentUserId) return false;
+        if ((r.owner_user_id ?? "") !== currentUserId) return false;
+      }
+
+      if (sp) {
+        const rowSp = String(r.sales_person ?? "").trim().toLowerCase();
+        if (!rowSp.includes(sp)) return false;
+      }
+
+      if (bs) {
+        const rowBs = String(r.battery_solution ?? "").trim().toLowerCase();
+        if (!rowBs.includes(bs)) return false;
+      }
+
       if (filterProbBand !== "all") {
         const p = Number(r.probability ?? 0);
         if (filterProbBand === "0-30" && !(p >= 0 && p <= 30)) return false;
         if (filterProbBand === "31-60" && !(p >= 31 && p <= 60)) return false;
-        if (filterProbBand === "61-100" && !(p >= 61 && p <= 100)) return false;
       }
 
       if (filterCloseWindow !== "all") {
@@ -586,18 +997,115 @@ export default function PipelinePage() {
 
       return true;
     });
-  }, [rows, filterBranchId, filterStage, filterProbBand, filterCloseWindow, filterHealth, search, today, in30, in60]);
+  }, [rows, filterBranchId, filterStage, filterSalesPerson, filterBatterySolution, filterOwner, ownerFieldAvailable, currentUserId, filterProbBand, filterCloseWindow, filterHealth, search, today, in30, in60]);
+
+  async function markNextActionDone(id: string, opts?: { note?: string | null }) {
+    const ok = await ensureSignedInOrBounce();
+    if (!ok) return;
+
+    const current = rows.find((r) => r.id === id);
+    const previousCompletedAt = current?.next_action_completed_at ?? null;
+    if (previousCompletedAt) {
+      alert(`Already marked done (${formatNZDateTime(previousCompletedAt)}).`);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Mark this next action as done? This will record completion and remove it from overdue lists."
+    );
+    if (!confirmed) return;
+
+    try {
+      setNextActionSavingId(id);
+
+      const completedAt = new Date().toISOString();
+
+      const noteRaw = String(opts?.note ?? "").trim();
+      const note = noteRaw ? noteRaw.slice(0, 500) : null;
+
+      // best-effort user identity
+      let completedBy: string | null = null;
+      try {
+        const { data } = await supabase.auth.getUser();
+        completedBy = data?.user?.email ?? data?.user?.id ?? null;
+      } catch {
+        completedBy = currentUserEmail || currentUserId || null;
+      }
+
+      // optimistic UI
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                next_action_completed_at: completedAt,
+                next_action_completed_by: completedBy,
+                next_action_completed_note: note,
+              }
+            : r
+        )
+      );
+
+      if (editOpen && editId === id) {
+        setEditNextActionCompletedAt(completedAt);
+        setEditCompletionNote("");
+      }
+
+      // Try to write extended metadata; if those columns don't exist, fall back to completion timestamp only.
+      const fullUpdate = {
+        next_action_completed_at: completedAt,
+        ...(completedBy ? { next_action_completed_by: completedBy } : {}),
+        ...(note ? { next_action_completed_note: note } : {}),
+      } as Record<string, unknown>;
+
+      let { error } = await supabase.from("opportunities").update(fullUpdate).eq("id", id);
+
+      if (error) {
+        const msg = error.message || "Failed to mark next action done";
+        if (/next_action_completed_at/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Completion tracking isn't in your database yet. Add a nullable timestamptz column on opportunities: next_action_completed_at."
+          );
+        }
+
+        const isMissingMeta =
+          (/next_action_completed_by/i.test(msg) || /next_action_completed_note/i.test(msg)) &&
+          /(does not exist|unknown column|column)/i.test(msg);
+
+        if (isMissingMeta) {
+          const retry = await supabase
+            .from("opportunities")
+            .update({ next_action_completed_at: completedAt })
+            .eq("id", id);
+          error = retry.error;
+        }
+
+        if (error) throw new Error(error.message || msg);
+      }
+    } catch (e: unknown) {
+      console.error("Mark done failed:", e);
+      await fetchOpportunities();
+      if (editOpen && editId === id) {
+        setEditNextActionCompletedAt(String(previousCompletedAt ?? ""));
+      }
+      alert(getErrorMessage(e));
+    } finally {
+      setNextActionSavingId(null);
+    }
+  }
 
   const dashboard = useMemo(() => {
     const active = filteredRows.filter((r) => isActiveStage(r.stage));
 
-    const overdueActions = active.filter((r) => {
+    const activeWithOpenActions = active.filter((r) => !r.next_action_completed_at);
+
+    const overdueActions = activeWithOpenActions.filter((r) => {
       const d = isoToDate(r.next_action_due);
       if (!d) return false;
       return startOfDay(d) < today;
     });
 
-    const dueThisWeek = active.filter((r) => {
+    const dueThisWeek = activeWithOpenActions.filter((r) => {
       const d = isoToDate(r.next_action_due);
       if (!d) return false;
       const x = startOfDay(d);
@@ -613,7 +1121,7 @@ export default function PipelinePage() {
 
     const totalValue = active.reduce((sum, r) => sum + Number(r.rolling_12m_value ?? 0), 0);
 
-    const nextActionsList = active
+    const nextActionsList = activeWithOpenActions
       .filter((r) => r.next_action_due)
       .map((r) => ({ r, due: startOfDay(isoToDate(r.next_action_due)!) }))
       .sort((a, b) => a.due.getTime() - b.due.getTime())
@@ -636,7 +1144,7 @@ export default function PipelinePage() {
     const closeDate = isoToDate(o.close_date);
     
     // Red: overdue next action
-    if (nextDue && nextDue < now) return "at-risk";
+    if (!o.next_action_completed_at && nextDue && nextDue < now) return "at-risk";
     
     // Yellow: closing within 7 days
     if (closeDate && closeDate <= addDays(now, 7) && closeDate >= now) return "caution";
@@ -692,6 +1200,9 @@ export default function PipelinePage() {
   function clearFilters() {
     setFilterBranchId("");
     setFilterStage("");
+    setFilterSalesPerson("");
+    setFilterBatterySolution("");
+    setFilterOwner("all");
     setFilterCloseWindow("all");
     setFilterProbBand("all");
     setFilterHealth("all");
@@ -733,8 +1244,8 @@ export default function PipelinePage() {
     return (
       <div className="p-6 min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <p className="font-semibold text-gray-700">Loading pipeline…</p>
-          <p className="text-sm text-gray-600 mt-2">Fetching your data</p>
+          <p className="font-semibold text-slate-800 dark:text-slate-100">Loading pipeline…</p>
+          <p className="text-sm text-slate-700 dark:text-slate-300 mt-2">Fetching your data</p>
         </div>
       </div>
     );
@@ -763,21 +1274,21 @@ export default function PipelinePage() {
   }
 
   return (
-    <div className="p-6 space-y-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 min-h-screen text-gray-900 dark:text-gray-100">
+    <div className="p-6 space-y-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 min-h-screen text-slate-950 dark:text-slate-100">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">Pipeline</h1>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-slate-700 dark:text-slate-300">
             Kanban board added. Drag deals around like you’re solving a crime.
           </p>
         </div>
 
         <div className="flex gap-2">
-          <div className="rounded-lg border border-gray-300 bg-white dark:bg-slate-800 dark:border-slate-600 shadow-sm p-1 flex gap-1">
+          <div className="rounded-lg border border-slate-300 bg-white dark:bg-slate-800 dark:border-slate-600 shadow-sm p-1 flex gap-1">
             <button
               onClick={() => setViewMode("board")}
               className={`rounded-md px-3 py-1 text-sm font-medium transition-all ${
-                viewMode === "board" ? "bg-blue-600 text-white shadow-md" : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700"
+                viewMode === "board" ? "bg-blue-600 text-white shadow-md" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
               }`}
             >
               Board
@@ -785,7 +1296,7 @@ export default function PipelinePage() {
             <button
               onClick={() => setViewMode("table")}
               className={`rounded-md px-3 py-1 text-sm font-medium transition-all ${
-                viewMode === "table" ? "bg-blue-600 text-white shadow-md" : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700"
+                viewMode === "table" ? "bg-blue-600 text-white shadow-md" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
               }`}
             >
               Table
@@ -795,35 +1306,35 @@ export default function PipelinePage() {
           <button
             onClick={() => setShowWhatIf(true)}
             title="Simulate different scenarios"
-            className="rounded-lg bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all shadow-sm"
+            className="rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 px-5 py-2.5 text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-md hover:shadow-lg"
           >
             🎯 What-If
           </button>
 
           <button
             onClick={() => router.push("/analytics")}
-            className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-4 py-2 text-sm font-medium shadow-md hover:shadow-lg hover:from-indigo-700 hover:to-indigo-800 transition-all"
+            className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-5 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-indigo-800 transition-all"
           >
             📊 Analytics
           </button>
 
           <button
             onClick={() => router.push("/dashboard")}
-            className="rounded-lg bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2 text-sm font-medium shadow-md hover:shadow-lg hover:from-purple-700 hover:to-purple-800 transition-all"
+            className="rounded-lg bg-gradient-to-r from-purple-600 to-purple-700 text-white px-5 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:from-purple-700 hover:to-purple-800 transition-all"
           >
             Dashboard
           </button>
 
           <button
             onClick={() => setShowCreate((s) => !s)}
-            className="rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 text-sm font-medium shadow-md hover:shadow-lg hover:from-blue-700 hover:to-blue-800 transition-all"
+            className="rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-blue-800 transition-all"
           >
             {showCreate ? "Close" : "New opportunity"}
           </button>
 
           <button
             onClick={signOut}
-            className="rounded-lg border border-gray-300 dark:border-slate-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 hover:border-gray-400 dark:hover:border-slate-500 transition-all shadow-sm"
+            className="rounded-lg border border-slate-300 dark:border-slate-600 px-5 py-2.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-md hover:shadow-lg"
           >
             Sign out
           </button>
@@ -851,19 +1362,19 @@ export default function PipelinePage() {
       </div>
 
       {/* FILTERS */}
-      <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm space-y-4">
+      <div className="rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm space-y-4">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Filters</h2>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Filters</h2>
           <button className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline transition-colors" onClick={clearFilters}>
             Clear all
           </button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-5">
+        <div className={`grid gap-4 ${ownerFieldAvailable ? "md:grid-cols-9" : "md:grid-cols-8"}`}>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Branch</label>
+            <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Branch</label>
             <select
-              className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all appearance-none cursor-pointer hover:border-gray-400 dark:hover:border-slate-500"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all appearance-none cursor-pointer hover:border-slate-400 dark:hover:border-slate-500"
               value={filterBranchId}
               onChange={(e) => setFilterBranchId(e.target.value)}
             >
@@ -877,9 +1388,59 @@ export default function PipelinePage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Stage</label>
+            <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Sales person</label>
             <select
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all appearance-none cursor-pointer hover:border-gray-400"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all appearance-none cursor-pointer hover:border-slate-400 dark:hover:border-slate-500"
+              value={filterSalesPerson}
+              onChange={(e) => setFilterSalesPerson(e.target.value)}
+            >
+              <option value="">All sales people</option>
+              {salesPeople.map((sp) => (
+                <option key={sp} value={sp}>
+                  {sp}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {ownerFieldAvailable && (
+            <div>
+              <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Owner</label>
+              <select
+                className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all appearance-none cursor-pointer hover:border-slate-400 dark:hover:border-slate-500"
+                value={filterOwner}
+                onChange={(e) => setFilterOwner(e.target.value === "mine" ? "mine" : "all")}
+                disabled={!currentUserId}
+              >
+                <option value="all">All</option>
+                <option value="mine">My deals</option>
+              </select>
+              {!currentUserId && (
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Sign in required.</p>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Battery Solution</label>
+            <select
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all appearance-none cursor-pointer hover:border-slate-400 dark:hover:border-slate-500"
+              value={filterBatterySolution}
+              onChange={(e) => setFilterBatterySolution(e.target.value)}
+            >
+              <option value="">All solutions</option>
+              {BATTERY_SOLUTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Stage</label>
+            <select
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all appearance-none cursor-pointer hover:border-slate-400 dark:hover:border-slate-500"
               value={filterStage}
               onChange={(e) => setFilterStage(e.target.value)}
             >
@@ -893,9 +1454,9 @@ export default function PipelinePage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Close window</label>
+            <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Close window</label>
             <select
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all appearance-none cursor-pointer hover:border-gray-400"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all appearance-none cursor-pointer hover:border-slate-400 dark:hover:border-slate-500"
               value={filterCloseWindow}
               onChange={(e) => setFilterCloseWindow(parseCloseWindow(e.target.value))}
             >
@@ -907,9 +1468,9 @@ export default function PipelinePage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Probability</label>
+            <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Probability</label>
             <select
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all appearance-none cursor-pointer hover:border-gray-400"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all appearance-none cursor-pointer hover:border-slate-400 dark:hover:border-slate-500"
               value={filterProbBand}
               onChange={(e) => setFilterProbBand(parseProbBand(e.target.value))}
             >
@@ -921,9 +1482,9 @@ export default function PipelinePage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Deal Health</label>
+            <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Deal Health</label>
             <select
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all appearance-none cursor-pointer hover:border-gray-400"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all appearance-none cursor-pointer hover:border-slate-400 dark:hover:border-slate-500"
               value={filterHealth}
               onChange={(e) => setFilterHealth(parseHealth(e.target.value))}
             >
@@ -935,9 +1496,9 @@ export default function PipelinePage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Search</label>
             <input
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all hover:border-gray-400"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-all hover:border-slate-400 dark:hover:border-slate-500 placeholder:text-slate-500 dark:placeholder:text-slate-400"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Account name…"
@@ -948,10 +1509,22 @@ export default function PipelinePage() {
 
       {/* DASHBOARD */}
       <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 p-4 shadow-sm hover:shadow-md transition-shadow">
-          <div className="text-sm font-medium text-blue-700">Overdue actions</div>
-          <div className="text-3xl font-bold text-blue-900 mt-2">{dashboard.overdueActions.length}</div>
-          <div className="text-xs text-blue-600 mt-1">Active stages only</div>
+        <div
+          className={`rounded-2xl border p-4 shadow-sm hover:shadow-md transition-shadow ${
+            dashboard.overdueActions.length
+              ? "border-red-200 bg-gradient-to-br from-red-50 to-red-100"
+              : "border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100"
+          }`}
+        >
+          <div className={`text-sm font-medium ${dashboard.overdueActions.length ? "text-red-800" : "text-blue-700"}`}>
+            Overdue actions
+          </div>
+          <div className={`text-3xl font-bold mt-2 ${dashboard.overdueActions.length ? "text-red-900" : "text-blue-900"}`}>
+            {dashboard.overdueActions.length}
+          </div>
+          <div className={`text-xs mt-1 ${dashboard.overdueActions.length ? "text-red-700" : "text-blue-600"}`}>
+            Active stages only
+          </div>
         </div>
 
         <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100 p-4 shadow-sm hover:shadow-md transition-shadow">
@@ -967,7 +1540,7 @@ export default function PipelinePage() {
         </div>
 
         <div className="rounded-2xl border border-green-200 bg-gradient-to-br from-green-50 to-green-100 p-4 shadow-sm hover:shadow-md transition-shadow">
-          <div className="text-sm font-medium text-green-700">Total 12M value</div>
+          <div className="text-sm font-medium text-green-700">Total 12 MTH value</div>
           <div className="text-3xl font-bold text-green-900 mt-2">
             {dashboard.totalValue.toLocaleString()}
           </div>
@@ -976,33 +1549,152 @@ export default function PipelinePage() {
       </div>
 
       {/* NEXT ACTIONS LIST */}
-      <div className="rounded-2xl border p-4">
+      <div className="rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
         <h2 className="text-lg font-semibold">Next actions due (top 10)</h2>
-        <div className="mt-3 overflow-x-auto rounded-xl border">
+        <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+            <thead className="bg-slate-50 dark:bg-slate-900">
               <tr>
-                <th className="text-left p-3">Account</th>
-                <th className="text-left p-3">Branch</th>
-                <th className="text-left p-3">Stage</th>
-                <th className="text-left p-3">Due</th>
-                <th className="text-left p-3">Next action</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Account</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Branch</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Stage</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Due</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Next action</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Done</th>
               </tr>
             </thead>
             <tbody>
-              {dashboard.nextActionsList.map((o) => (
-                <tr key={o.id} className="border-t">
-                  <td className="p-3">{getAccountName(o)}</td>
-                  <td className="p-3">{getBranchName(o)}</td>
-                  <td className="p-3">{o.stage ?? "-"}</td>
-                  <td className="p-3">{o.next_action_due ?? "-"}</td>
-                  <td className="p-3">{o.next_action ?? "—"}</td>
-                </tr>
-              ))}
+              {dashboard.nextActionsList.map((o) => {
+                const due = isoToDate(o.next_action_due);
+                const isOverdue = !!due && startOfDay(due) < today;
+                const isCompleted = Boolean(o.next_action_completed_at);
+                const isSaving = nextActionSavingId === o.id;
+
+                return (
+                  <tr
+                    key={o.id}
+                    className={`border-t border-slate-200 dark:border-slate-700 ${
+                      isOverdue
+                        ? "bg-red-50/70 dark:bg-red-950/30"
+                        : "bg-transparent"
+                    }`}
+                  >
+                    <td className="p-3">{getAccountName(o)}</td>
+                    <td className="p-3">{getBranchName(o)}</td>
+                    <td className="p-3">{o.stage ?? "-"}</td>
+                    <td className="p-3">
+                      <span className={isOverdue ? "font-semibold text-red-900 dark:text-red-200" : ""}>
+                        {formatNZDate(o.next_action_due)}
+                      </span>
+                      {isOverdue && (
+                        <span className="ml-2 inline-flex items-center rounded-full bg-red-200 text-red-900 px-2 py-0.5 text-xs font-semibold">
+                          Overdue
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-3">{o.next_action ?? "—"}</td>
+                    <td className="p-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={isSaving || isCompleted}
+                          onClick={() => markNextActionDone(o.id)}
+                          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm disabled:opacity-60"
+                        >
+                          {isSaving ? "Saving…" : isCompleted ? "Done" : "Mark done"}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isSaving || isCompleted}
+                          onClick={() => snoozeNextAction(o.id, 1)}
+                          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm disabled:opacity-60"
+                        >
+                          Snooze 1d
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isSaving || isCompleted}
+                          onClick={() => snoozeNextAction(o.id, 7)}
+                          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm disabled:opacity-60"
+                        >
+                          Snooze 7d
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {!dashboard.nextActionsList.length && (
                 <tr>
-                  <td className="p-3" colSpan={5}>
+                  <td className="p-3" colSpan={6}>
                     No next actions due (either you’re incredibly organised or nobody is entering next actions).
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* RECENTLY COMPLETED ACTIONS */}
+      <div className="mt-4 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
+        <h2 className="text-lg font-semibold">Recently completed next actions</h2>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-900">
+              <tr>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Account</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Completed</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">By</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Due</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Next action</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Reopen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows
+                .filter((r) => r.next_action_completed_at)
+                .slice()
+                .sort((a, b) =>
+                  new Date(String(b.next_action_completed_at)).getTime() -
+                  new Date(String(a.next_action_completed_at)).getTime()
+                )
+                .slice(0, 10)
+                .map((o) => {
+                  const isSaving = nextActionSavingId === o.id;
+                  return (
+                    <tr key={o.id} className="border-t border-slate-200 dark:border-slate-700">
+                      <td className="p-3">{getAccountName(o)}</td>
+                      <td className="p-3">{formatNZDateTime(o.next_action_completed_at)}</td>
+                      <td className="p-3">{o.next_action_completed_by ?? "—"}</td>
+                      <td className="p-3">{formatNZDate(o.next_action_due)}</td>
+                      <td className="p-3">
+                        <div className="font-medium">{o.next_action ?? "—"}</div>
+                        {o.next_action_completed_note ? (
+                          <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                            Note: {o.next_action_completed_note}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="p-3">
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => reopenNextAction(o.id)}
+                          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm disabled:opacity-60"
+                        >
+                          {isSaving ? "Saving…" : "Reopen"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              {!filteredRows.some((r) => r.next_action_completed_at) && (
+                <tr>
+                  <td className="p-3" colSpan={6}>
+                    No completed next actions yet.
                   </td>
                 </tr>
               )}
@@ -1013,14 +1705,13 @@ export default function PipelinePage() {
 
       {/* CREATE */}
       {showCreate && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-800">Create opportunity</h2>
-
+        <div className="rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create opportunity</h2>
           <form onSubmit={onCreateOpportunity} className="mt-4 grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
-              <label className="text-sm">Account (type existing or new)</label>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Account (type existing or new)</label>
               <input
-                className="mt-1 w-full rounded-lg border px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                 value={createAccountName}
                 onChange={(e) => setCreateAccountName(e.target.value)}
                 list="account-list"
@@ -1032,15 +1723,15 @@ export default function PipelinePage() {
                   <option key={a.id} value={a.name} />
                 ))}
               </datalist>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
                 If it doesn’t exist, it will be created automatically.
               </p>
             </div>
 
             <div>
-              <label className="text-sm">Branch</label>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Branch</label>
               <select
-                className="mt-1 w-full rounded-lg border px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                 value={createBranchId}
                 onChange={(e) => setCreateBranchId(e.target.value)}
               >
@@ -1053,9 +1744,130 @@ export default function PipelinePage() {
             </div>
 
             <div>
-              <label className="text-sm">Stage</label>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Sales person</label>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                value={createSalesPerson}
+                onChange={(e) => setCreateSalesPerson(e.target.value)}
+                list="sales-person-list-create"
+                placeholder="e.g. Sam Taylor"
+              />
+              <datalist id="sales-person-list-create">
+                {salesPeople.map((sp) => (
+                  <option key={sp} value={sp} />
+                ))}
+              </datalist>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Used for filtering (optional).</p>
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Battery Solution</label>
               <select
-                className="mt-1 w-full rounded-lg border px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors appearance-none cursor-pointer"
+                value={createBatterySolution}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setCreateBatterySolution(next);
+
+                  if (next !== "Commercial Vehicles and Fleets") {
+                    setCreateVehicleBrand("");
+                    setCreateVehicleModel("");
+                    setCreateVehicleSuggestion("");
+                    setCreateVehicleSuggestionError(null);
+                    setCreatingVehicleSuggestion(false);
+                  }
+                }}
+              >
+                <option value="">(optional)</option>
+                {BATTERY_SOLUTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {createBatterySolution === "Commercial Vehicles and Fleets" && (
+              <>
+                <div>
+                  <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Vehicle brand</label>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                    value={createVehicleBrand}
+                    onChange={(e) => setCreateVehicleBrand(e.target.value)}
+                    placeholder="e.g. Ford"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Vehicle model</label>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                    value={createVehicleModel}
+                    onChange={(e) => setCreateVehicleModel(e.target.value)}
+                    placeholder="e.g. Ranger 3.2L"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <button
+                    type="button"
+                    disabled={creatingVehicleSuggestion}
+                    onClick={suggestVehicleSolutionForCreate}
+                    className="rounded-lg bg-gradient-to-r from-slate-900 to-slate-800 text-white px-4 py-2 text-sm font-semibold shadow-md hover:shadow-lg hover:from-slate-950 hover:to-slate-900 transition-all disabled:opacity-60"
+                  >
+                    {creatingVehicleSuggestion ? "Generating…" : "Get AI recommendation"}
+                  </button>
+
+                  {createVehicleSuggestionError && (
+                    <div className="mt-2 text-sm text-red-700">{createVehicleSuggestionError}</div>
+                  )}
+
+                  {createVehicleSuggestion && (
+                    <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
+                      <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        Suggested solution
+                      </div>
+                      <pre className="mt-2 whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200 font-sans">
+                        {createVehicleSuggestion}
+                      </pre>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCreateNotes((prev) =>
+                              [
+                                prev.trim(),
+                                `Vehicle (${createVehicleBrand.trim()} ${createVehicleModel.trim()}):`,
+                                createVehicleSuggestion.trim(),
+                              ]
+                                .filter(Boolean)
+                                .join("\n")
+                                .trim()
+                            )
+                          }
+                          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                        >
+                          Add to notes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCreateVehicleSuggestion("")}
+                          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            <div>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Stage</label>
+              <select
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                 value={createStage}
                 onChange={(e) => setCreateStage(parseStage(e.target.value))}
               >
@@ -1068,9 +1880,9 @@ export default function PipelinePage() {
             </div>
 
             <div>
-              <label className="text-sm">Expected close date</label>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Expected close date</label>
               <input
-                className="mt-1 w-full rounded-lg border px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                 type="date"
                 value={createCloseDate}
                 onChange={(e) => setCreateCloseDate(e.target.value)}
@@ -1078,9 +1890,9 @@ export default function PipelinePage() {
             </div>
 
             <div>
-              <label className="text-sm">Rolling 12M value</label>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Rolling 12 MTH value</label>
               <input
-                className="mt-1 w-full rounded-lg border px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                 type="number"
                 min={0}
                 step="0.01"
@@ -1090,9 +1902,9 @@ export default function PipelinePage() {
             </div>
 
             <div>
-              <label className="text-sm">Probability %</label>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Probability %</label>
               <input
-                className="mt-1 w-full rounded-lg border px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                 type="number"
                 min={0}
                 max={100}
@@ -1103,9 +1915,9 @@ export default function PipelinePage() {
             </div>
 
             <div>
-              <label className="text-sm">Next action</label>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Next action</label>
               <input
-                className="mt-1 w-full rounded-lg border px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                 value={createNextAction}
                 onChange={(e) => setCreateNextAction(e.target.value)}
                 placeholder="e.g. Book site visit"
@@ -1113,9 +1925,9 @@ export default function PipelinePage() {
             </div>
 
             <div>
-              <label className="text-sm">Next action due</label>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Next action due</label>
               <input
-                className="mt-1 w-full rounded-lg border px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                 type="date"
                 value={createNextActionDue}
                 onChange={(e) => setCreateNextActionDue(e.target.value)}
@@ -1123,9 +1935,9 @@ export default function PipelinePage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="text-sm">Notes</label>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Notes</label>
               <textarea
-                className="mt-1 w-full rounded-lg border px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                 rows={3}
                 value={createNotes}
                 onChange={(e) => setCreateNotes(e.target.value)}
@@ -1152,7 +1964,7 @@ export default function PipelinePage() {
                   resetCreateForm();
                   setShowCreate(false);
                 }}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+                className="rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
               >
                 Cancel
               </button>
@@ -1163,8 +1975,8 @@ export default function PipelinePage() {
 
       {/* KANBAN BOARD */}
       {viewMode === "board" && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="text-sm text-gray-600 mb-4 font-medium">
+        <div className="rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+          <div className="text-sm text-slate-700 dark:text-slate-300 mb-4 font-medium">
             Drag a card into a new column to update the stage.
           </div>
 
@@ -1176,10 +1988,10 @@ export default function PipelinePage() {
 
                 return (
                   <div key={stage} className="w-[320px] flex-shrink-0">
-                    <div className="rounded-xl border bg-gray-50 p-3">
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
                       <div className="flex items-center justify-between">
                         <div className="font-semibold">{stage}</div>
-                        <div className="text-xs text-gray-600">
+                        <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
                           {list.length} · {total.toLocaleString()}
                         </div>
                       </div>
@@ -1212,16 +2024,18 @@ export default function PipelinePage() {
                               {getHealthBadge(health)}
                             </div>
 
-                            <div className="text-xs text-gray-600 mt-1">
-                              {getBranchName(o)} · {(o.probability ?? 0) + "%"}
-                            </div>
+                            <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mt-1">
+                                            {getBranchName(o)} · {(o.probability ?? 0) + "%"}
+                                            {o.sales_person ? ` · ${o.sales_person}` : ""}
+                                            {o.battery_solution ? ` · ${o.battery_solution}` : ""}
+                                          </div>
 
-                            <div className="text-xs font-semibold mt-2 text-gray-900">
+                            <div className="text-xs font-semibold mt-2 text-slate-900 dark:text-slate-100">
                               Est. value: ${(estValue / 1000).toFixed(1)}k
                             </div>
 
-                            <div className="text-xs text-gray-600 mt-1">
-                              Close: {o.close_date ?? "—"}
+                            <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mt-1">
+                              Close: {formatNZDate(o.close_date) || "—"}
                             </div>
 
                             {o.next_action && (
@@ -1235,7 +2049,7 @@ export default function PipelinePage() {
                         })}
 
                         {!list.length && (
-                          <div className="text-sm text-gray-500 p-2">
+                          <div className="text-sm font-medium text-slate-700 dark:text-slate-300 p-2">
                             Drop cards here.
                           </div>
                         )}
@@ -1251,31 +2065,37 @@ export default function PipelinePage() {
 
       {/* TABLE */}
       {viewMode === "table" && (
-        <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
           <table className="w-full text-sm">
-            <thead className="bg-gradient-to-r from-gray-100 to-gray-50 border-b border-gray-200">
+            <thead className="bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-900 dark:to-slate-900 border-b border-slate-200 dark:border-slate-700">
               <tr>
-                <th className="text-left p-3 font-semibold text-gray-700">Account</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Branch</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Stage</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Close</th>
-                <th className="text-right p-3 font-semibold text-gray-700">12M Value</th>
-                <th className="text-right p-3 font-semibold text-gray-700">Prob</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Next Action</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Next Due</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Edit</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Account</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Branch</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Sales person</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Battery Solution</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Stage</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Close</th>
+                <th className="text-right p-3 font-semibold text-slate-800 dark:text-slate-200">12 MTH Value</th>
+                <th className="text-right p-3 font-semibold text-slate-800 dark:text-slate-200">Prob</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Next Action</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Next Due</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Edit</th>
               </tr>
             </thead>
 
             <tbody>
               {filteredRows.map((o) => (
-                <tr key={o.id} className="border-t border-gray-200 hover:bg-blue-50 transition-colors">
+                <tr key={o.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-blue-50/60 dark:hover:bg-blue-950/30 transition-colors">
                   <td className="p-3">{getAccountName(o)}</td>
                   <td className="p-3">{getBranchName(o)}</td>
 
+                  <td className="p-3">{o.sales_person ?? "—"}</td>
+
+                  <td className="p-3">{o.battery_solution ?? "—"}</td>
+
                   <td className="p-3">
                     <select
-                      className="rounded-lg border px-2 py-1"
+                      className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                       value={parseStage(o.stage ?? "Prospecting")}
                       disabled={rowSavingId === o.id}
                       onChange={(e) => quickUpdateStage(o.id, e.target.value)}
@@ -1287,21 +2107,21 @@ export default function PipelinePage() {
                       ))}
                     </select>
                     {rowSavingId === o.id && (
-                      <span className="ml-2 text-xs text-gray-500">saving…</span>
+                      <span className="ml-2 text-xs font-medium text-slate-600 dark:text-slate-400">saving…</span>
                     )}
                   </td>
 
-                  <td className="p-3">{o.close_date ?? "-"}</td>
+                  <td className="p-3">{formatNZDate(o.close_date)}</td>
                   <td className="p-3 text-right">
                     {Number(o.rolling_12m_value ?? 0).toLocaleString()}
                   </td>
                   <td className="p-3 text-right">{o.probability ?? 0}%</td>
                   <td className="p-3">{o.next_action ?? "—"}</td>
-                  <td className="p-3">{o.next_action_due ?? "—"}</td>
+                  <td className="p-3">{formatNZDate(o.next_action_due)}</td>
 
                   <td className="p-3">
                     <button
-                      className="rounded-lg border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+                      className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
                       onClick={() => openEdit(o)}
                     >
                       Edit
@@ -1312,7 +2132,7 @@ export default function PipelinePage() {
 
               {!filteredRows.length && (
                 <tr>
-                  <td className="p-3" colSpan={9}>
+                  <td className="p-3" colSpan={11}>
                     Nothing matches your filters. Try “Clear” above.
                   </td>
                 </tr>
@@ -1325,16 +2145,16 @@ export default function PipelinePage() {
       {/* EDIT MODAL */}
       {editOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-2xl rounded-2xl bg-white border border-gray-200 p-6 shadow-lg">
+          <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-6 shadow-lg text-slate-950 dark:text-slate-100">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-800">Edit opportunity</h2>
-                <p className="text-sm text-gray-600 mt-1">{editAccountName}</p>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Edit opportunity</h2>
+                <p className="text-sm text-slate-700 dark:text-slate-300 mt-1">{editAccountName}</p>
               </div>
 
               <button
                 onClick={() => setEditOpen(false)}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+                className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
               >
                 Close
               </button>
@@ -1342,9 +2162,9 @@ export default function PipelinePage() {
 
             <form onSubmit={saveEdit} className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-sm">Branch</label>
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Branch</label>
                 <select
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                   value={editBranchId}
                   onChange={(e) => setEditBranchId(e.target.value)}
                 >
@@ -1357,10 +2177,165 @@ export default function PipelinePage() {
                 </select>
               </div>
 
+              {ownerFieldAvailable && (
+                <div>
+                  <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Owner</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors appearance-none cursor-pointer"
+                    value={
+                      !editOwnerUserId.trim()
+                        ? ""
+                        : editOwnerUserId.trim() === currentUserId
+                          ? "mine"
+                          : "other"
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "mine") {
+                        if (currentUserId) setEditOwnerUserId(currentUserId);
+                      } else if (v === "") {
+                        setEditOwnerUserId("");
+                      }
+                    }}
+                    disabled={!currentUserId}
+                  >
+                    <option value="">Unassigned</option>
+                    <option value="mine">Me</option>
+                    {editOwnerUserId.trim() && editOwnerUserId.trim() !== currentUserId && (
+                      <option value="other" disabled>
+                        Other user (read-only)
+                      </option>
+                    )}
+                  </select>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Used by the “My deals” filter.</p>
+                </div>
+              )}
+
               <div>
-                <label className="text-sm">Stage</label>
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Sales person</label>
+                <input
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                  value={editSalesPerson}
+                  onChange={(e) => setEditSalesPerson(e.target.value)}
+                  list="sales-person-list-edit"
+                  placeholder="e.g. Sam Taylor"
+                />
+                <datalist id="sales-person-list-edit">
+                  {salesPeople.map((sp) => (
+                    <option key={sp} value={sp} />
+                  ))}
+                </datalist>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Used for filtering (optional).</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Battery Solution</label>
                 <select
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors appearance-none cursor-pointer"
+                  value={editBatterySolution}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setEditBatterySolution(next);
+
+                    if (next !== "Commercial Vehicles and Fleets") {
+                      setEditVehicleBrand("");
+                      setEditVehicleModel("");
+                      setEditVehicleSuggestion("");
+                      setEditVehicleSuggestionError(null);
+                      setEditingVehicleSuggestion(false);
+                    }
+                  }}
+                >
+                  <option value="">(optional)</option>
+                  {BATTERY_SOLUTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {editBatterySolution === "Commercial Vehicles and Fleets" && (
+                <>
+                  <div>
+                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Vehicle brand</label>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                      value={editVehicleBrand}
+                      onChange={(e) => setEditVehicleBrand(e.target.value)}
+                      placeholder="e.g. Ford"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Vehicle model</label>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                      value={editVehicleModel}
+                      onChange={(e) => setEditVehicleModel(e.target.value)}
+                      placeholder="e.g. Ranger 3.2L"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <button
+                      type="button"
+                      disabled={editingVehicleSuggestion}
+                      onClick={suggestVehicleSolutionForEdit}
+                      className="rounded-lg bg-gradient-to-r from-slate-900 to-slate-800 text-white px-4 py-2 text-sm font-semibold shadow-md hover:shadow-lg hover:from-slate-950 hover:to-slate-900 transition-all disabled:opacity-60"
+                    >
+                      {editingVehicleSuggestion ? "Generating…" : "Get AI recommendation"}
+                    </button>
+
+                    {editVehicleSuggestionError && (
+                      <div className="mt-2 text-sm text-red-700">{editVehicleSuggestionError}</div>
+                    )}
+
+                    {editVehicleSuggestion && (
+                      <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
+                        <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          Suggested solution
+                        </div>
+                        <pre className="mt-2 whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200 font-sans">
+                          {editVehicleSuggestion}
+                        </pre>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditNotes((prev) =>
+                                [
+                                  prev.trim(),
+                                  `Vehicle (${editVehicleBrand.trim()} ${editVehicleModel.trim()}):`,
+                                  editVehicleSuggestion.trim(),
+                                ]
+                                  .filter(Boolean)
+                                  .join("\n")
+                                  .trim()
+                              )
+                            }
+                            className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                          >
+                            Add to notes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditVehicleSuggestion("")}
+                            className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Stage</label>
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                   value={editStage}
                   onChange={(e) => setEditStage(parseStage(e.target.value))}
                 >
@@ -1373,9 +2348,9 @@ export default function PipelinePage() {
               </div>
 
               <div>
-                <label className="text-sm">Expected close date</label>
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Expected close date</label>
                 <input
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                   type="date"
                   value={editCloseDate}
                   onChange={(e) => setEditCloseDate(e.target.value)}
@@ -1383,9 +2358,9 @@ export default function PipelinePage() {
               </div>
 
               <div>
-                <label className="text-sm">Rolling 12M value</label>
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Rolling 12 MTH value</label>
                 <input
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                   type="number"
                   min={0}
                   step="0.01"
@@ -1395,9 +2370,9 @@ export default function PipelinePage() {
               </div>
 
               <div>
-                <label className="text-sm">Probability %</label>
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Probability %</label>
                 <input
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                   type="number"
                   min={0}
                   max={100}
@@ -1408,19 +2383,107 @@ export default function PipelinePage() {
               </div>
 
               <div>
-                <label className="text-sm">Next action due</label>
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Next action due</label>
                 <input
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                   type="date"
                   value={editNextActionDue}
                   onChange={(e) => setEditNextActionDue(e.target.value)}
                 />
               </div>
 
+              <div className="md:col-span-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Next action status</div>
+                    {editNextActionCompletedAt.trim() ? (
+                      <div className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                        <span className="inline-flex items-center rounded-full bg-green-200 text-green-900 px-2 py-0.5 text-xs font-semibold">
+                          Completed
+                        </span>
+                        <span className="ml-2">{formatNZDateTime(editNextActionCompletedAt)}</span>
+                      </div>
+                    ) : editNextAction.trim() || editNextActionDue.trim() ? (
+                      <div className="mt-1 text-sm text-slate-700 dark:text-slate-300">Not completed yet</div>
+                    ) : (
+                      <div className="mt-1 text-sm text-slate-700 dark:text-slate-300">No next action set</div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={
+                      savingEdit ||
+                      nextActionSavingId === editId ||
+                      Boolean(editNextActionCompletedAt.trim()) ||
+                      (!editNextAction.trim() && !editNextActionDue.trim())
+                    }
+                    onClick={() => markNextActionDone(editId, { note: editCompletionNote })}
+                    className="rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm disabled:opacity-60"
+                  >
+                    {nextActionSavingId === editId ? "Saving…" : editNextActionCompletedAt.trim() ? "Done" : "Mark done"}
+                  </button>
+                </div>
+
+                {!editNextActionCompletedAt.trim() && (editNextAction.trim() || editNextActionDue.trim()) && (
+                  <div className="mt-3">
+                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      Completion note (optional)
+                    </label>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                      value={editCompletionNote}
+                      onChange={(e) => setEditCompletionNote(e.target.value)}
+                      placeholder="e.g. Spoke with fleet manager; confirmed CCA requirement"
+                      maxLength={500}
+                    />
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={
+                      savingEdit ||
+                      nextActionSavingId === editId ||
+                      Boolean(editNextActionCompletedAt.trim())
+                    }
+                    onClick={() => snoozeNextAction(editId, 1)}
+                    className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm disabled:opacity-60"
+                  >
+                    Snooze 1d
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      savingEdit ||
+                      nextActionSavingId === editId ||
+                      Boolean(editNextActionCompletedAt.trim())
+                    }
+                    onClick={() => snoozeNextAction(editId, 7)}
+                    className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm disabled:opacity-60"
+                  >
+                    Snooze 7d
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      savingEdit ||
+                      nextActionSavingId === editId ||
+                      !Boolean(editNextActionCompletedAt.trim())
+                    }
+                    onClick={() => reopenNextAction(editId)}
+                    className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm disabled:opacity-60"
+                  >
+                    Reopen
+                  </button>
+                </div>
+              </div>
+
               <div className="md:col-span-2">
-                <label className="text-sm">Next action</label>
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Next action</label>
                 <input
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                   value={editNextAction}
                   onChange={(e) => setEditNextAction(e.target.value)}
                   placeholder="e.g. Call fleet manager"
@@ -1428,9 +2491,9 @@ export default function PipelinePage() {
               </div>
 
               <div className="md:col-span-2">
-                <label className="text-sm">Notes</label>
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Notes</label>
                 <textarea
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                   rows={3}
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
@@ -1453,7 +2516,7 @@ export default function PipelinePage() {
                 <button
                   type="button"
                   onClick={() => setEditOpen(false)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+                  className="rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
                 >
                   Cancel
                 </button>

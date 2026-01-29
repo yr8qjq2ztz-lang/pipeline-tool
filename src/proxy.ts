@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Always start with a pass-through response we can attach cookies to
   const response = NextResponse.next();
 
@@ -32,9 +32,7 @@ export async function middleware(request: NextRequest) {
 
   const isLoginRoute = pathname === "/login" || pathname.startsWith("/login/");
   const isProtectedRoute =
-    pathname === "/" ||
-    pathname.startsWith("/pipeline") ||
-    pathname.startsWith("/dashboard");
+    pathname === "/" || pathname.startsWith("/pipeline") || pathname.startsWith("/dashboard");
 
   // Not logged in + trying to access protected route -> go to login
   if (!user && isProtectedRoute) {
@@ -55,7 +53,7 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
-// Apply middleware to all routes except Next static assets & common files
+// Apply proxy to all routes except Next static assets & common files
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };

@@ -24,7 +24,7 @@ export function FunnelChart({ data }: { data: FunnelData[] }) {
   // Validate and filter data
   if (!Array.isArray(data) || data.length === 0) {
     return (
-      <div className="p-4 text-center text-gray-600 dark:text-gray-400">
+      <div className="p-4 text-center text-slate-700 dark:text-slate-200">
         No funnel data available
       </div>
     );
@@ -41,7 +41,7 @@ export function FunnelChart({ data }: { data: FunnelData[] }) {
 
   if (validData.length === 0) {
     return (
-      <div className="p-4 text-center text-gray-600 dark:text-gray-400">
+      <div className="p-4 text-center text-slate-700 dark:text-slate-200">
         No valid funnel data available
       </div>
     );
@@ -79,11 +79,11 @@ export function FunnelChart({ data }: { data: FunnelData[] }) {
         {chartData.map((d) => (
           <div
             key={d.stage}
-            className="rounded-lg bg-gray-50 dark:bg-slate-700 p-3 border border-gray-200 dark:border-slate-600"
+            className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3 border border-slate-300 dark:border-slate-600"
           >
-            <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">{d.stage}</div>
-            <div className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">{d.count}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <div className="text-xs font-semibold text-slate-800 dark:text-slate-100">{d.stage}</div>
+            <div className="text-lg font-bold text-slate-950 dark:text-white mt-1">{d.count}</div>
+            <div className="text-xs font-medium text-slate-700 dark:text-slate-200 mt-1">
               {d.percentage}% · {d.conversion}%→
             </div>
           </div>
@@ -97,7 +97,7 @@ export function CycleTimeChart({ data }: { data: CycleTimeData[] }) {
   // Validate and filter data
   if (!Array.isArray(data) || data.length === 0) {
     return (
-      <div className="p-4 text-center text-gray-600 dark:text-gray-400">
+      <div className="p-4 text-center text-slate-700 dark:text-slate-200">
         No cycle time data available
       </div>
     );
@@ -114,7 +114,7 @@ export function CycleTimeChart({ data }: { data: CycleTimeData[] }) {
 
   if (validData.length === 0) {
     return (
-      <div className="p-4 text-center text-gray-600 dark:text-gray-400">
+      <div className="p-4 text-center text-slate-700 dark:text-slate-200">
         No valid cycle time data available
       </div>
     );
@@ -163,7 +163,7 @@ export function WinLossChart({ data }: { data: WinLossData[] }) {
   // Validate and filter data
   if (!Array.isArray(data) || data.length === 0) {
     return (
-      <div className="p-4 text-center text-gray-600 dark:text-gray-400">
+      <div className="p-4 text-center text-slate-700 dark:text-slate-200">
         No win/loss data available
       </div>
     );
@@ -180,7 +180,7 @@ export function WinLossChart({ data }: { data: WinLossData[] }) {
 
   if (validData.length === 0) {
     return (
-      <div className="p-4 text-center text-gray-600 dark:text-gray-400">
+      <div className="p-4 text-center text-slate-700 dark:text-slate-200">
         No valid win/loss data available
       </div>
     );
@@ -216,11 +216,11 @@ export function WinLossChart({ data }: { data: WinLossData[] }) {
             key={d.name}
             className="rounded-lg bg-gradient-to-br from-green-50 to-red-50 dark:from-green-950 dark:to-red-950 p-3 border border-gray-200 dark:border-slate-600"
           >
-            <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">{d.name}</div>
-            <div className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">
+            <div className="text-xs font-semibold text-slate-800 dark:text-slate-100">{d.name}</div>
+            <div className="text-lg font-bold text-slate-950 dark:text-white mt-1">
               {d.winRate}%
             </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <div className="text-xs font-medium text-slate-700 dark:text-slate-200 mt-1">
               {d.won}W / {d.lost}L
             </div>
           </div>
@@ -236,13 +236,15 @@ export function ConversionRateCard({ from, to, count }: { from: string; to: stri
     return null;
   }
   if (typeof count !== "number" || count < 0 || !isFinite(count)) {
-    console.error("ConversionRateCard: Invalid count:", count);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("ConversionRateCard: Invalid count:", count);
+    }
     return null;
   }
 
   return (
     <div className="rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 p-4 border border-blue-200 dark:border-blue-900">
-      <div className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+      <div className="text-sm text-slate-800 dark:text-slate-100 font-semibold">
         {from} → {to}
       </div>
       <div className="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-2">

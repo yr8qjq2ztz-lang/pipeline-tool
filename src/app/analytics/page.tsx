@@ -8,6 +8,10 @@ import { FunnelChart, CycleTimeChart, WinLossChart } from "@/app/components/Anal
 import type { FunnelData, CycleTimeData } from "@/app/components/AnalyticsCharts";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
+const devError = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") console.error(...args);
+};
+
 const STAGES = ["Prospecting", "Qualified", "Proposal", "Negotiation", "Won", "Lost"];
 
 interface OpportunityRow {
@@ -17,6 +21,7 @@ interface OpportunityRow {
   rolling_12m_value: number | null;
   probability: number | null;
   created_at: string | null;
+  sales_person?: string | null;
   accounts?: { name: string }[] | null;
 }
 
@@ -49,7 +54,7 @@ export default function AnalyticsPage() {
               setError(null);
               const { data, error: err } = await supabase
                 .from("opportunities")
-                .select("id, stage, close_date, rolling_12m_value, probability, created_at, accounts(name)");
+                .select("id, stage, close_date, rolling_12m_value, probability, created_at, sales_person, accounts(name)");
 
               if (err) throw err;
               
@@ -61,7 +66,7 @@ export default function AnalyticsPage() {
               setRows(validRows);
             } catch (e: unknown) {
               const errorMsg = e instanceof Error ? e.message : "Failed to load analytics";
-              console.error("Analytics load error:", errorMsg);
+              devError("Analytics load error:", errorMsg);
               setError(errorMsg);
             } finally {
               setLoading(false);
@@ -71,7 +76,7 @@ export default function AnalyticsPage() {
 
         return () => sub.subscription.unsubscribe();
       } catch (error) {
-        console.error("Setup error:", error);
+        devError("Setup error:", error);
         setError("Failed to initialize analytics");
         setLoading(false);
       }

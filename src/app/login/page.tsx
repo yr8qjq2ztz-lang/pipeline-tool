@@ -107,7 +107,9 @@ export default function LoginPage() {
 
       router.replace("/pipeline");
     } catch (err) {
-      console.error("Auth error:", err);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Auth error:", err);
+      }
       setError("An unexpected error occurred. Please try again.");
     }
   }

@@ -19,6 +19,10 @@ export interface SavedView {
 
 const STORAGE_KEY = "pipeline_saved_views";
 
+const devError = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") console.error(...args);
+};
+
 export function getSavedViews(): SavedView[] {
   if (typeof window === "undefined") return [];
   
@@ -66,7 +70,7 @@ export function saveView(name: string, filters: SavedView["filters"]): SavedView
     
     return newView;
   } catch (error) {
-    console.error("Failed to save view:", error);
+    devError("Failed to save view:", error);
     throw new Error("Failed to save view. Check browser storage limits.");
   }
 }
@@ -82,7 +86,7 @@ export function deleteView(id: string): void {
     const filtered = views.filter((v) => v.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
   } catch (error) {
-    console.error("Failed to delete view:", error);
+    devError("Failed to delete view:", error);
   }
 }
 
@@ -107,6 +111,6 @@ export function updateViewName(id: string, newName: string): void {
       console.warn("View not found:", id);
     }
   } catch (error) {
-    console.error("Failed to update view name:", error);
+    devError("Failed to update view name:", error);
   }
 }
