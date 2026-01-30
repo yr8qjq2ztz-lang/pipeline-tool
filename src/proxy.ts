@@ -32,7 +32,11 @@ export async function proxy(request: NextRequest) {
 
   const isLoginRoute = pathname === "/login" || pathname.startsWith("/login/");
   const isProtectedRoute =
-    pathname === "/" || pathname.startsWith("/pipeline") || pathname.startsWith("/dashboard") || pathname.startsWith("/replay");
+    pathname === "/" ||
+    pathname.startsWith("/pipeline") ||
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/replay") ||
+    pathname.startsWith("/admin");
 
   // Not logged in + trying to access protected route -> go to login
   if (!user && isProtectedRoute) {
