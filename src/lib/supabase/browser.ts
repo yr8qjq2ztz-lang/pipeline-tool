@@ -1,7 +1,7 @@
-﻿import { createBrowserClient } from "@supabase/ssr";
+﻿import { createClient } from "@supabase/supabase-js";
 
 export function supabaseBrowser() {
-  type BrowserSupabaseClient = ReturnType<typeof createBrowserClient>;
+  type BrowserSupabaseClient = ReturnType<typeof createClient>;
 
   // Next.js may prerender Client Components during `next build`.
   // Avoid constructing a browser client on the server where env vars
@@ -35,5 +35,5 @@ export function supabaseBrowser() {
     );
   }
 
-  return createBrowserClient(url, key);
+  return createClient(url, key);
 }

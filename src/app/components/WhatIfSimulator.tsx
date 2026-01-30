@@ -18,21 +18,39 @@ export function WhatIfSimulator({ onClose, deals }: WhatIfSimulatorProps) {
     [key: string]: { probability: number; value: number };
   }>({});
 
+  const clampProbability = (p: unknown) => Math.max(0, Math.min(100, Number(p) || 0));
+  const clampValue = (v: unknown) => Math.max(0, Number(v) || 0);
+
+  function getValueSliderConfig(baseValue: number): { max: number; step: number } {
+    const base = Math.max(0, Number(baseValue) || 0);
+    const max = Math.max(1000, Math.round(base * 2));
+
+    // Use a stable, sensible step size (prevents jitter from changing step mid-drag).
+    const step =
+      base <= 5000 ? 250 :
+      base <= 20000 ? 500 :
+      base <= 50000 ? 1000 :
+      base <= 200000 ? 5000 :
+      10000;
+
+    return { max, step };
+  }
+
   // Validate deals array
   const validDeals = Array.isArray(deals) && deals.length > 0 
     ? deals.filter(d => d && typeof d === 'object' && d.id && d.value != null && d.probability != null)
     : [];
 
   const originalValue = validDeals.reduce((sum, d) => {
-    const val = Number(d.value) || 0;
-    const prob = Math.max(0, Math.min(100, Number(d.probability) || 0));
+    const val = clampValue(d.value);
+    const prob = clampProbability(d.probability);
     return sum + (val * (prob / 100));
   }, 0);
 
   const adjustedValue = validDeals.reduce((sum, d) => {
     const adj = adjustments[d.id] || { probability: d.probability, value: d.value };
-    const val = Math.max(0, Number(adj.value) || 0);
-    const prob = Math.max(0, Math.min(100, Number(adj.probability) || 0));
+    const val = clampValue(adj.value);
+    const prob = clampProbability(adj.probability);
     return sum + (val * (prob / 100));
   }, 0);
 
@@ -140,12 +158,16 @@ export function WhatIfSimulator({ onClose, deals }: WhatIfSimulatorProps) {
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Adjust Deals</h3>
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {deals.map((deal) => {
+              {validDeals.map((deal) => {
                 const adj = adjustments[deal.id] || {
                   probability: deal.probability,
                   value: deal.value,
                 };
-                const dealValue = adj.value * (adj.probability / 100);
+                const baseValue = Math.max(0, Number(deal.value) || 0);
+                const { max: valueMax, step: valueStep } = getValueSliderConfig(baseValue);
+                const safeAdjProbability = clampProbability(adj.probability);
+                const safeAdjValue = Math.max(0, Math.min(valueMax, clampValue(adj.value)));
+                const dealValue = safeAdjValue * (safeAdjProbability / 100);
 
                 return (
                   <div
@@ -171,33 +193,30 @@ export function WhatIfSimulator({ onClose, deals }: WhatIfSimulatorProps) {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-semibold text-slate-800 dark:text-slate-100 mb-2">
-                          Probability: {adj.probability}%
+                          Probability: {safeAdjProbability}%
                         </label>
                         <input
                           type="range"
                           min={0}
                           max={100}
-                          value={adj.probability}
-                          onChange={(e) =>
-                            handleProbabilityChange(deal.id, Number(e.target.value))
-                          }
+                          step={1}
+                          value={safeAdjProbability}
+                          onChange={(e) => handleProbabilityChange(deal.id, e.currentTarget.valueAsNumber)}
                           className="w-full cursor-pointer"
                         />
                       </div>
 
                       <div>
                         <label className="block text-xs font-semibold text-slate-800 dark:text-slate-100 mb-2">
-                          Value: ${(adj.value / 1000).toFixed(1)}k
+                          Value: ${(safeAdjValue / 1000).toFixed(1)}k
                         </label>
                         <input
                           type="range"
                           min={0}
-                          max={adj.value * 2}
-                          step={adj.value / 10}
-                          value={adj.value}
-                          onChange={(e) =>
-                            handleValueChange(deal.id, Number(e.target.value))
-                          }
+                          max={valueMax}
+                          step={valueStep}
+                          value={safeAdjValue}
+                          onChange={(e) => handleValueChange(deal.id, Math.min(valueMax, e.currentTarget.valueAsNumber))}
                           className="w-full cursor-pointer"
                         />
                       </div>

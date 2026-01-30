@@ -30,6 +30,13 @@ type OpportunityRow = {
   battery_solution?: string | null;
   vehicle_brand?: string | null;
   vehicle_model?: string | null;
+  how_we_win?: string | null;
+  opportunity_for_bnt?: string | null;
+  bnt_categories?: string | null;
+  bnt_invite?: string | null;
+  opportunity_for_penz?: string | null;
+  penz_categories?: string | null;
+  penz_invite?: string | null;
   notes: string | null;
 
   accounts?: { id: string; name: string } | null;
@@ -54,6 +61,31 @@ const BATTERY_SOLUTIONS = [
   "Industrial",
   "Energy Storage",
   "Mixed",
+] as const;
+
+const HOW_WE_WIN_OPTIONS = [
+  "Quality / performance",
+  "Convenience / ease (time, effort, access)",
+  "Price / value for money (including deals)",
+  "Trust / credibility",
+  "Recommendation",
+] as const;
+
+const BNT_CATEGORY_OPTIONS = [
+  "Brake Friction",
+  "Engine",
+  "Steering and Suspension",
+  "Lubricants",
+  "Filtration",
+  "All",
+] as const;
+
+const PENZ_CATEGORY_OPTIONS = [
+  "Hoists",
+  "Tyre Changers",
+  "Wheel Balancers",
+  "Wheel Aligners",
+  "All",
 ] as const;
 
 type CloseWindow = "all" | "next30" | "next60" | "past";
@@ -138,6 +170,7 @@ export default function PipelinePage() {
   const supabase = supabaseBrowser();
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
 
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -169,11 +202,13 @@ export default function PipelinePage() {
   const [createNextActionDue, setCreateNextActionDue] = useState<string>("");
   const [createSalesPerson, setCreateSalesPerson] = useState<string>("");
   const [createBatterySolution, setCreateBatterySolution] = useState<string>("");
-  const [createVehicleBrand, setCreateVehicleBrand] = useState<string>("");
-  const [createVehicleModel, setCreateVehicleModel] = useState<string>("");
-  const [createVehicleSuggestion, setCreateVehicleSuggestion] = useState<string>("");
-  const [creatingVehicleSuggestion, setCreatingVehicleSuggestion] = useState<boolean>(false);
-  const [createVehicleSuggestionError, setCreateVehicleSuggestionError] = useState<string | null>(null);
+  const [createHowWeWin, setCreateHowWeWin] = useState<string[]>([]);
+  const [createOpportunityForBnt, setCreateOpportunityForBnt] = useState<string>("");
+  const [createBntCategories, setCreateBntCategories] = useState<string[]>([]);
+  const [createBntInvite, setCreateBntInvite] = useState<string>("");
+  const [createOpportunityForPenz, setCreateOpportunityForPenz] = useState<string>("");
+  const [createPenzCategories, setCreatePenzCategories] = useState<string[]>([]);
+  const [createPenzInvite, setCreatePenzInvite] = useState<string>("");
   const [createNotes, setCreateNotes] = useState<string>("");
 
   // ---- Edit modal state ----
@@ -198,12 +233,58 @@ export default function PipelinePage() {
   const [editOwnerUserId, setEditOwnerUserId] = useState<string>("");
   const [editSalesPerson, setEditSalesPerson] = useState<string>("");
   const [editBatterySolution, setEditBatterySolution] = useState<string>("");
-  const [editVehicleBrand, setEditVehicleBrand] = useState<string>("");
-  const [editVehicleModel, setEditVehicleModel] = useState<string>("");
-  const [editVehicleSuggestion, setEditVehicleSuggestion] = useState<string>("");
-  const [editingVehicleSuggestion, setEditingVehicleSuggestion] = useState<boolean>(false);
-  const [editVehicleSuggestionError, setEditVehicleSuggestionError] = useState<string | null>(null);
+  const [editHowWeWin, setEditHowWeWin] = useState<string[]>([]);
+  const [editOpportunityForBnt, setEditOpportunityForBnt] = useState<string>("");
+  const [editBntCategories, setEditBntCategories] = useState<string[]>([]);
+  const [editBntInvite, setEditBntInvite] = useState<string>("");
+  const [editOpportunityForPenz, setEditOpportunityForPenz] = useState<string>("");
+  const [editPenzCategories, setEditPenzCategories] = useState<string[]>([]);
+  const [editPenzInvite, setEditPenzInvite] = useState<string>("");
   const [editNotes, setEditNotes] = useState<string>("");
+
+  function toggleMultiSelect(setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) {
+    setter((prev) => (prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]));
+  }
+
+  function parseMultiValue(raw: unknown): string[] {
+    const s = String(raw ?? "").trim();
+    if (!s) return [];
+    return s
+      .split(/[,;]+/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+  }
+
+  function getOpportunitySignals(o: OpportunityRow): string[] {
+    const out: string[] = [];
+
+    const howWeWin = parseMultiValue(o.how_we_win);
+    if (howWeWin.length) {
+      const shown = howWeWin.slice(0, 2).join(", ");
+      const suffix = howWeWin.length > 2 ? ` +${howWeWin.length - 2}` : "";
+      out.push(`How we win: ${shown}${suffix}`);
+    }
+
+    const bnt = String(o.opportunity_for_bnt ?? "").trim();
+    if (bnt.toLowerCase() === "yes") {
+      const cats = parseMultiValue(o.bnt_categories);
+      const catText = cats.length
+        ? ` (${cats.slice(0, 2).join(", ")}${cats.length > 2 ? ` +${cats.length - 2}` : ""})`
+        : "";
+      out.push(`BNT${catText}`);
+    }
+
+    const penz = String(o.opportunity_for_penz ?? "").trim();
+    if (penz.toLowerCase() === "yes") {
+      const cats = parseMultiValue(o.penz_categories);
+      const catText = cats.length
+        ? ` (${cats.slice(0, 2).join(", ")}${cats.length > 2 ? ` +${cats.length - 2}` : ""})`
+        : "";
+      out.push(`PENZ${catText}`);
+    }
+
+    return out;
+  }
 
   // quick update UI state
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
@@ -257,6 +338,21 @@ export default function PipelinePage() {
     }
   }
 
+  async function refreshAll() {
+    const ok = await ensureSignedInOrBounce();
+    if (!ok) return;
+
+    try {
+      setRefreshing(true);
+      setDbError(null);
+      await Promise.all([fetchBranches(), fetchAccounts(), fetchOpportunities()]);
+    } catch (e: unknown) {
+      setDbError(getErrorMessage(e));
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function fetchBranches() {
     try {
       const { data, error } = await supabase
@@ -270,9 +366,37 @@ export default function PipelinePage() {
       if (list.length === 0) {
         console.warn("No branches found in database");
       }
-      setBranches(list);
+      const wanted = "National Account/Head Office";
+      const hasWanted = list.some((b) => b.name.trim().toLowerCase() === wanted.toLowerCase());
 
-      // default branch for create form
+      if (!hasWanted) {
+        try {
+          const { data: created, error: createErr } = await supabase
+            .from("branches")
+            .insert({ name: wanted })
+            .select("id,name")
+            .single();
+
+          if (createErr) {
+            console.warn(
+              `Could not auto-create branch "${wanted}". Add it in the branches table to show it in dropdowns.`,
+              createErr
+            );
+            setBranches(list);
+            if (!createBranchId && list.length) setCreateBranchId(list[0].id);
+            return;
+          }
+
+          const next = [...list, (created as Branch)].sort((a, b) => a.name.localeCompare(b.name));
+          setBranches(next);
+          if (!createBranchId && next.length) setCreateBranchId(next[0].id);
+          return;
+        } catch (e) {
+          console.warn(`Branch seed for "${wanted}" failed.`, e);
+        }
+      }
+
+      setBranches(list);
       if (!createBranchId && list.length) setCreateBranchId(list[0].id);
     } catch (e) {
       console.error("Failed to fetch branches:", e);
@@ -422,85 +546,14 @@ export default function PipelinePage() {
     setCreateNextActionDue("");
     setCreateSalesPerson("");
     setCreateBatterySolution("");
-    setCreateVehicleBrand("");
-    setCreateVehicleModel("");
-    setCreateVehicleSuggestion("");
-    setCreateVehicleSuggestionError(null);
+    setCreateHowWeWin([]);
+    setCreateOpportunityForBnt("");
+    setCreateBntCategories([]);
+    setCreateBntInvite("");
+    setCreateOpportunityForPenz("");
+    setCreatePenzCategories([]);
+    setCreatePenzInvite("");
     setCreateNotes("");
-  }
-
-  async function suggestVehicleSolutionForCreate() {
-    setCreateVehicleSuggestionError(null);
-    setCreateVehicleSuggestion("");
-
-    const brand = createVehicleBrand.trim();
-    const model = createVehicleModel.trim();
-    if (!brand || !model) {
-      setCreateVehicleSuggestionError("Please enter both vehicle brand and model first.");
-      return;
-    }
-
-    try {
-      setCreatingVehicleSuggestion(true);
-      const res = await fetch("/api/battery-recommendation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          batterySolution: createBatterySolution,
-          brand,
-          model,
-          market: "NZ",
-        }),
-      });
-
-      const json = (await res.json()) as { recommendation?: string; error?: string };
-      if (!res.ok) {
-        throw new Error(json.error || "Failed to generate recommendation");
-      }
-
-      setCreateVehicleSuggestion(String(json.recommendation ?? ""));
-    } catch (e: unknown) {
-      setCreateVehicleSuggestionError(getErrorMessage(e));
-    } finally {
-      setCreatingVehicleSuggestion(false);
-    }
-  }
-
-  async function suggestVehicleSolutionForEdit() {
-    setEditVehicleSuggestionError(null);
-    setEditVehicleSuggestion("");
-
-    const brand = editVehicleBrand.trim();
-    const model = editVehicleModel.trim();
-    if (!brand || !model) {
-      setEditVehicleSuggestionError("Please enter both vehicle brand and model first.");
-      return;
-    }
-
-    try {
-      setEditingVehicleSuggestion(true);
-      const res = await fetch("/api/battery-recommendation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          batterySolution: editBatterySolution,
-          brand,
-          model,
-          market: "NZ",
-        }),
-      });
-
-      const json = (await res.json()) as { recommendation?: string; error?: string };
-      if (!res.ok) {
-        throw new Error(json.error || "Failed to generate recommendation");
-      }
-
-      setEditVehicleSuggestion(String(json.recommendation ?? ""));
-    } catch (e: unknown) {
-      setEditVehicleSuggestionError(getErrorMessage(e));
-    } finally {
-      setEditingVehicleSuggestion(false);
-    }
   }
 
   async function onCreateOpportunity(e: React.FormEvent) {
@@ -549,11 +602,20 @@ export default function PipelinePage() {
         next_action_completed_at: null,
         ...(createSalesPerson.trim() ? { sales_person: createSalesPerson.trim() } : {}),
         ...(createBatterySolution.trim() ? { battery_solution: createBatterySolution.trim() } : {}),
-        ...(createBatterySolution === "Commercial Vehicles and Fleets" && createVehicleBrand.trim()
-          ? { vehicle_brand: createVehicleBrand.trim() }
+        ...(createHowWeWin.length ? { how_we_win: createHowWeWin.join(", ") } : {}),
+        ...(createOpportunityForBnt.trim() ? { opportunity_for_bnt: createOpportunityForBnt.trim() } : {}),
+        ...(createOpportunityForBnt.trim().toLowerCase() === "yes" && createBntCategories.length
+          ? { bnt_categories: createBntCategories.join(", ") }
           : {}),
-        ...(createBatterySolution === "Commercial Vehicles and Fleets" && createVehicleModel.trim()
-          ? { vehicle_model: createVehicleModel.trim() }
+        ...(createOpportunityForBnt.trim().toLowerCase() === "yes" && createBntInvite.trim()
+          ? { bnt_invite: createBntInvite.trim() }
+          : {}),
+        ...(createOpportunityForPenz.trim() ? { opportunity_for_penz: createOpportunityForPenz.trim() } : {}),
+        ...(createOpportunityForPenz.trim().toLowerCase() === "yes" && createPenzCategories.length
+          ? { penz_categories: createPenzCategories.join(", ") }
+          : {}),
+        ...(createOpportunityForPenz.trim().toLowerCase() === "yes" && createPenzInvite.trim()
+          ? { penz_invite: createPenzInvite.trim() }
           : {}),
         notes: createNotes.trim() || null,
       } as Record<string, unknown>;
@@ -585,6 +647,41 @@ export default function PipelinePage() {
         if (/battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
             "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution."
+          );
+        }
+        if (/how_we_win/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "How we win field isn't in your database yet. Add a nullable text column on opportunities: how_we_win."
+          );
+        }
+        if (/opportunity_for_bnt/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "BNT opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bnt."
+          );
+        }
+        if (/bnt_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "BNT categories field isn't in your database yet. Add a nullable text column on opportunities: bnt_categories."
+          );
+        }
+        if (/bnt_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "BNT invite field isn't in your database yet. Add a nullable text column on opportunities: bnt_invite."
+          );
+        }
+        if (/opportunity_for_penz/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "PENZ opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_penz."
+          );
+        }
+        if (/penz_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "PENZ categories field isn't in your database yet. Add a nullable text column on opportunities: penz_categories."
+          );
+        }
+        if (/penz_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite."
           );
         }
           throw new Error(error.message || msg);
@@ -620,10 +717,13 @@ export default function PipelinePage() {
     setEditOwnerUserId(String(row.owner_user_id ?? ""));
     setEditSalesPerson(String(row.sales_person ?? ""));
     setEditBatterySolution(String(row.battery_solution ?? ""));
-    setEditVehicleBrand(String(row.vehicle_brand ?? ""));
-    setEditVehicleModel(String(row.vehicle_model ?? ""));
-    setEditVehicleSuggestion("");
-    setEditVehicleSuggestionError(null);
+    setEditHowWeWin(parseMultiValue(row.how_we_win));
+    setEditOpportunityForBnt(String(row.opportunity_for_bnt ?? ""));
+    setEditBntCategories(parseMultiValue(row.bnt_categories));
+    setEditBntInvite(String(row.bnt_invite ?? ""));
+    setEditOpportunityForPenz(String(row.opportunity_for_penz ?? ""));
+    setEditPenzCategories(parseMultiValue(row.penz_categories));
+    setEditPenzInvite(String(row.penz_invite ?? ""));
     setEditNotes(row.notes ?? "");
     setEditOpen(true);
   }
@@ -794,8 +894,6 @@ export default function PipelinePage() {
             ? null
             : normDate(editNextActionCompletedAt);
 
-      const isCommercialFleet = editBatterySolution.trim() === "Commercial Vehicles and Fleets";
-
       const updateBase = {
         branch_id: editBranchId || null,
         stage: editStage,
@@ -809,11 +907,27 @@ export default function PipelinePage() {
         ...(editBatterySolution.trim()
           ? { battery_solution: editBatterySolution.trim() }
           : { battery_solution: null }),
-        ...(isCommercialFleet
-          ? {
-              vehicle_brand: editVehicleBrand.trim() || null,
-              vehicle_model: editVehicleModel.trim() || null,
-            }
+        how_we_win: editHowWeWin.length ? editHowWeWin.join(", ") : null,
+        opportunity_for_bnt: editOpportunityForBnt.trim() || null,
+        bnt_categories:
+          editOpportunityForBnt.trim().toLowerCase() === "yes"
+            ? editBntCategories.length
+              ? editBntCategories.join(", ")
+              : null
+            : null,
+        bnt_invite:
+          editOpportunityForBnt.trim().toLowerCase() === "yes" ? editBntInvite.trim() || null : null,
+        opportunity_for_penz: editOpportunityForPenz.trim() || null,
+        penz_categories:
+          editOpportunityForPenz.trim().toLowerCase() === "yes"
+            ? editPenzCategories.length
+              ? editPenzCategories.join(", ")
+              : null
+            : null,
+        penz_invite:
+          editOpportunityForPenz.trim().toLowerCase() === "yes" ? editPenzInvite.trim() || null : null,
+        ...(editBatterySolution.trim() === "Commercial Vehicles and Fleets"
+          ? {}
           : {
               vehicle_brand: null,
               vehicle_model: null,
@@ -837,6 +951,42 @@ export default function PipelinePage() {
         if (/battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
             "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution."
+          );
+        }
+
+        if (/how_we_win/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "How we win field isn't in your database yet. Add a nullable text column on opportunities: how_we_win."
+          );
+        }
+        if (/opportunity_for_bnt/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "BNT opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bnt."
+          );
+        }
+        if (/bnt_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "BNT categories field isn't in your database yet. Add a nullable text column on opportunities: bnt_categories."
+          );
+        }
+        if (/bnt_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "BNT invite field isn't in your database yet. Add a nullable text column on opportunities: bnt_invite."
+          );
+        }
+        if (/opportunity_for_penz/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "PENZ opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_penz."
+          );
+        }
+        if (/penz_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "PENZ categories field isn't in your database yet. Add a nullable text column on opportunities: penz_categories."
+          );
+        }
+        if (/penz_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite."
           );
         }
 
@@ -1355,22 +1505,39 @@ export default function PipelinePage() {
           </button>
 
           <button
+            onClick={refreshAll}
+            disabled={refreshing || loading}
+            className="rounded-lg border border-slate-300 dark:border-slate-600 px-5 py-2.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-md hover:shadow-lg disabled:opacity-60"
+            title="Refresh pipeline data"
+          >
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+
+          <button
             onClick={() => router.push("/analytics")}
-            className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-5 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-indigo-800 transition-all"
+            className="rounded-full bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-6 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 hover:from-indigo-700 hover:to-indigo-800 active:translate-y-0 transition-all"
           >
             📊 Analytics
           </button>
 
           <button
+            onClick={() => router.push("/replay")}
+            className="rounded-full bg-gradient-to-r from-slate-800 to-slate-900 text-white px-6 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 hover:from-slate-900 hover:to-black active:translate-y-0 transition-all"
+            title="Rewind your pipeline and see what changed"
+          >
+            ⏪ Time Machine
+          </button>
+
+          <button
             onClick={() => router.push("/dashboard")}
-            className="rounded-lg bg-gradient-to-r from-purple-600 to-purple-700 text-white px-5 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:from-purple-700 hover:to-purple-800 transition-all"
+            className="rounded-full bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 hover:from-purple-700 hover:to-purple-800 active:translate-y-0 transition-all"
           >
             Dashboard
           </button>
 
           <button
             onClick={() => setShowCreate((s) => !s)}
-            className="rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-blue-800 transition-all"
+            className="rounded-full bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 hover:from-blue-700 hover:to-blue-800 active:translate-y-0 transition-all"
           >
             {showCreate ? "Close" : "New opportunity"}
           </button>
@@ -1811,14 +1978,6 @@ export default function PipelinePage() {
                 onChange={(e) => {
                   const next = e.target.value;
                   setCreateBatterySolution(next);
-
-                  if (next !== "Commercial Vehicles and Fleets") {
-                    setCreateVehicleBrand("");
-                    setCreateVehicleModel("");
-                    setCreateVehicleSuggestion("");
-                    setCreateVehicleSuggestionError(null);
-                    setCreatingVehicleSuggestion(false);
-                  }
                 }}
               >
                 <option value="">(optional)</option>
@@ -1830,79 +1989,157 @@ export default function PipelinePage() {
               </select>
             </div>
 
-            {createBatterySolution === "Commercial Vehicles and Fleets" && (
-              <>
-                <div>
-                  <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Vehicle brand</label>
-                  <input
-                    className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
-                    value={createVehicleBrand}
-                    onChange={(e) => setCreateVehicleBrand(e.target.value)}
-                    placeholder="e.g. Ford"
-                  />
+            <div className="md:col-span-2">
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">How we win?</label>
+              <details className="mt-1 relative">
+                <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
+                  {createHowWeWin.length ? createHowWeWin.join(", ") : "Select one or more…"}
+                </summary>
+                <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
+                  <div className="grid gap-2">
+                    {HOW_WE_WIN_OPTIONS.map((opt) => (
+                      <label key={opt} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={createHowWeWin.includes(opt)}
+                          onChange={() => toggleMultiSelect(setCreateHowWeWin, opt)}
+                        />
+                        <span>{opt}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
+              </details>
+            </div>
 
-                <div>
-                  <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Vehicle model</label>
-                  <input
-                    className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
-                    value={createVehicleModel}
-                    onChange={(e) => setCreateVehicleModel(e.target.value)}
-                    placeholder="e.g. Ranger 3.2L"
-                  />
+            <div className="md:col-span-2">
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">OPPORTUNITY FOR BNT?</label>
+              <select
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                value={createOpportunityForBnt}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCreateOpportunityForBnt(v);
+                  if (v.trim().toLowerCase() !== "yes") {
+                    setCreateBntCategories([]);
+                    setCreateBntInvite("");
+                  }
+                }}
+              >
+                <option value="">(select)</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+
+            {createOpportunityForBnt.trim().toLowerCase() === "yes" && (
+              <>
+                <div className="md:col-span-2">
+                  <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">BNT categories</label>
+                  <details className="mt-1 relative">
+                    <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
+                      {createBntCategories.length ? createBntCategories.join(", ") : "Select one or more…"}
+                    </summary>
+                    <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
+                      <div className="grid gap-2">
+                        {BNT_CATEGORY_OPTIONS.map((opt) => (
+                          <label key={opt} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                            <input
+                              type="checkbox"
+                              checked={createBntCategories.includes(opt)}
+                              onChange={() => {
+                                if (opt === "All") {
+                                  setCreateBntCategories((prev) =>
+                                    prev.includes("All") ? [] : Array.from(BNT_CATEGORY_OPTIONS)
+                                  );
+                                } else {
+                                  toggleMultiSelect(setCreateBntCategories, opt);
+                                  setCreateBntCategories((prev) => prev.filter((x) => x !== "All"));
+                                }
+                              }}
+                            />
+                            <span>{opt}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
                 </div>
 
                 <div className="md:col-span-2">
-                  <button
-                    type="button"
-                    disabled={creatingVehicleSuggestion}
-                    onClick={suggestVehicleSolutionForCreate}
-                    className="rounded-lg bg-gradient-to-r from-slate-900 to-slate-800 text-white px-4 py-2 text-sm font-semibold shadow-md hover:shadow-lg hover:from-slate-950 hover:to-slate-900 transition-all disabled:opacity-60"
-                  >
-                    {creatingVehicleSuggestion ? "Generating…" : "Get AI recommendation"}
-                  </button>
+                  <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Next step invite who from BNT?</label>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                    value={createBntInvite}
+                    onChange={(e) => setCreateBntInvite(e.target.value)}
+                    placeholder="Name(s)…"
+                  />
+                </div>
+              </>
+            )}
 
-                  {createVehicleSuggestionError && (
-                    <div className="mt-2 text-sm text-red-700">{createVehicleSuggestionError}</div>
-                  )}
+            <div className="md:col-span-2">
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">OPPORTUNITY FOR PENZ?</label>
+              <select
+                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                value={createOpportunityForPenz}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCreateOpportunityForPenz(v);
+                  if (v.trim().toLowerCase() !== "yes") {
+                    setCreatePenzCategories([]);
+                    setCreatePenzInvite("");
+                  }
+                }}
+              >
+                <option value="">(select)</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
 
-                  {createVehicleSuggestion && (
-                    <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        Suggested solution
-                      </div>
-                      <pre className="mt-2 whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200 font-sans">
-                        {createVehicleSuggestion}
-                      </pre>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCreateNotes((prev) =>
-                              [
-                                prev.trim(),
-                                `Vehicle (${createVehicleBrand.trim()} ${createVehicleModel.trim()}):`,
-                                createVehicleSuggestion.trim(),
-                              ]
-                                .filter(Boolean)
-                                .join("\n")
-                                .trim()
-                            )
-                          }
-                          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
-                        >
-                          Add to notes
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCreateVehicleSuggestion("")}
-                          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
-                        >
-                          Clear
-                        </button>
+            {createOpportunityForPenz.trim().toLowerCase() === "yes" && (
+              <>
+                <div className="md:col-span-2">
+                  <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">PENZ categories</label>
+                  <details className="mt-1 relative">
+                    <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
+                      {createPenzCategories.length ? createPenzCategories.join(", ") : "Select one or more…"}
+                    </summary>
+                    <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
+                      <div className="grid gap-2">
+                        {PENZ_CATEGORY_OPTIONS.map((opt) => (
+                          <label key={opt} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                            <input
+                              type="checkbox"
+                              checked={createPenzCategories.includes(opt)}
+                              onChange={() => {
+                                if (opt === "All") {
+                                  setCreatePenzCategories((prev) =>
+                                    prev.includes("All") ? [] : Array.from(PENZ_CATEGORY_OPTIONS)
+                                  );
+                                } else {
+                                  toggleMultiSelect(setCreatePenzCategories, opt);
+                                  setCreatePenzCategories((prev) => prev.filter((x) => x !== "All"));
+                                }
+                              }}
+                            />
+                            <span>{opt}</span>
+                          </label>
+                        ))}
                       </div>
                     </div>
-                  )}
+                  </details>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Next step invite who from PENZ?</label>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                    value={createPenzInvite}
+                    onChange={(e) => setCreatePenzInvite(e.target.value)}
+                    placeholder="Name(s)…"
+                  />
                 </div>
               </>
             )}
@@ -2049,6 +2286,7 @@ export default function PipelinePage() {
                         {list.map((o) => {
                           const health = getDealHealth(o);
                           const estValue = Number(o.rolling_12m_value ?? 0) * (Number(o.probability ?? 0) / 100);
+                          const signals = getOpportunitySignals(o);
                           return (
                           <div
                             key={o.id}
@@ -2072,6 +2310,19 @@ export default function PipelinePage() {
                                             {o.sales_person ? ` · ${o.sales_person}` : ""}
                                             {o.battery_solution ? ` · ${o.battery_solution}` : ""}
                                           </div>
+
+                            {signals.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {signals.map((s) => (
+                                  <span
+                                    key={s}
+                                    className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:text-slate-100"
+                                  >
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
 
                             <div className="text-xs font-semibold mt-2 text-slate-900 dark:text-slate-100">
                               Est. value: ${(estValue / 1000).toFixed(1)}k
@@ -2116,6 +2367,7 @@ export default function PipelinePage() {
                 <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Branch</th>
                 <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Sales person</th>
                 <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Battery Solution</th>
+                <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Signals</th>
                 <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Stage</th>
                 <th className="text-left p-3 font-semibold text-slate-800 dark:text-slate-200">Close</th>
                 <th className="text-right p-3 font-semibold text-slate-800 dark:text-slate-200">12 MTH Value</th>
@@ -2135,6 +2387,25 @@ export default function PipelinePage() {
                   <td className="p-3">{o.sales_person ?? "—"}</td>
 
                   <td className="p-3">{o.battery_solution ?? "—"}</td>
+
+                  <td className="p-3">
+                    {(() => {
+                      const signals = getOpportunitySignals(o);
+                      if (!signals.length) return "—";
+                      return (
+                        <div className="flex flex-wrap gap-1">
+                          {signals.map((s) => (
+                            <span
+                              key={s}
+                              className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:text-slate-100"
+                            >
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </td>
 
                   <td className="p-3">
                     <select
@@ -2175,7 +2446,7 @@ export default function PipelinePage() {
 
               {!filteredRows.length && (
                 <tr>
-                  <td className="p-3" colSpan={11}>
+                  <td className="p-3" colSpan={12}>
                     Nothing matches your filters. Try “Clear” above.
                   </td>
                 </tr>
@@ -2279,14 +2550,6 @@ export default function PipelinePage() {
                   onChange={(e) => {
                     const next = e.target.value;
                     setEditBatterySolution(next);
-
-                    if (next !== "Commercial Vehicles and Fleets") {
-                      setEditVehicleBrand("");
-                      setEditVehicleModel("");
-                      setEditVehicleSuggestion("");
-                      setEditVehicleSuggestionError(null);
-                      setEditingVehicleSuggestion(false);
-                    }
                   }}
                 >
                   <option value="">(optional)</option>
@@ -2298,79 +2561,157 @@ export default function PipelinePage() {
                 </select>
               </div>
 
-              {editBatterySolution === "Commercial Vehicles and Fleets" && (
-                <>
-                  <div>
-                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Vehicle brand</label>
-                    <input
-                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
-                      value={editVehicleBrand}
-                      onChange={(e) => setEditVehicleBrand(e.target.value)}
-                      placeholder="e.g. Ford"
-                    />
+              <div className="md:col-span-2">
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">How we win?</label>
+                <details className="mt-1 relative">
+                  <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
+                    {editHowWeWin.length ? editHowWeWin.join(", ") : "Select one or more…"}
+                  </summary>
+                  <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
+                    <div className="grid gap-2">
+                      {HOW_WE_WIN_OPTIONS.map((opt) => (
+                        <label key={opt} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={editHowWeWin.includes(opt)}
+                            onChange={() => toggleMultiSelect(setEditHowWeWin, opt)}
+                          />
+                          <span>{opt}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
+                </details>
+              </div>
 
-                  <div>
-                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Vehicle model</label>
-                    <input
-                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
-                      value={editVehicleModel}
-                      onChange={(e) => setEditVehicleModel(e.target.value)}
-                      placeholder="e.g. Ranger 3.2L"
-                    />
+              <div className="md:col-span-2">
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">OPPORTUNITY FOR BNT?</label>
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                  value={editOpportunityForBnt}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setEditOpportunityForBnt(v);
+                    if (v.trim().toLowerCase() !== "yes") {
+                      setEditBntCategories([]);
+                      setEditBntInvite("");
+                    }
+                  }}
+                >
+                  <option value="">(select)</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+
+              {editOpportunityForBnt.trim().toLowerCase() === "yes" && (
+                <>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">BNT categories</label>
+                    <details className="mt-1 relative">
+                      <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
+                        {editBntCategories.length ? editBntCategories.join(", ") : "Select one or more…"}
+                      </summary>
+                      <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
+                        <div className="grid gap-2">
+                          {BNT_CATEGORY_OPTIONS.map((opt) => (
+                            <label key={opt} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={editBntCategories.includes(opt)}
+                                onChange={() => {
+                                  if (opt === "All") {
+                                    setEditBntCategories((prev) =>
+                                      prev.includes("All") ? [] : Array.from(BNT_CATEGORY_OPTIONS)
+                                    );
+                                  } else {
+                                    toggleMultiSelect(setEditBntCategories, opt);
+                                    setEditBntCategories((prev) => prev.filter((x) => x !== "All"));
+                                  }
+                                }}
+                              />
+                              <span>{opt}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </details>
                   </div>
 
                   <div className="md:col-span-2">
-                    <button
-                      type="button"
-                      disabled={editingVehicleSuggestion}
-                      onClick={suggestVehicleSolutionForEdit}
-                      className="rounded-lg bg-gradient-to-r from-slate-900 to-slate-800 text-white px-4 py-2 text-sm font-semibold shadow-md hover:shadow-lg hover:from-slate-950 hover:to-slate-900 transition-all disabled:opacity-60"
-                    >
-                      {editingVehicleSuggestion ? "Generating…" : "Get AI recommendation"}
-                    </button>
+                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Next step invite who from BNT?</label>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                      value={editBntInvite}
+                      onChange={(e) => setEditBntInvite(e.target.value)}
+                      placeholder="Name(s)…"
+                    />
+                  </div>
+                </>
+              )}
 
-                    {editVehicleSuggestionError && (
-                      <div className="mt-2 text-sm text-red-700">{editVehicleSuggestionError}</div>
-                    )}
+              <div className="md:col-span-2">
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">OPPORTUNITY FOR PENZ?</label>
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                  value={editOpportunityForPenz}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setEditOpportunityForPenz(v);
+                    if (v.trim().toLowerCase() !== "yes") {
+                      setEditPenzCategories([]);
+                      setEditPenzInvite("");
+                    }
+                  }}
+                >
+                  <option value="">(select)</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
 
-                    {editVehicleSuggestion && (
-                      <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
-                        <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                          Suggested solution
-                        </div>
-                        <pre className="mt-2 whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200 font-sans">
-                          {editVehicleSuggestion}
-                        </pre>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEditNotes((prev) =>
-                                [
-                                  prev.trim(),
-                                  `Vehicle (${editVehicleBrand.trim()} ${editVehicleModel.trim()}):`,
-                                  editVehicleSuggestion.trim(),
-                                ]
-                                  .filter(Boolean)
-                                  .join("\n")
-                                  .trim()
-                              )
-                            }
-                            className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
-                          >
-                            Add to notes
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditVehicleSuggestion("")}
-                            className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
-                          >
-                            Clear
-                          </button>
+              {editOpportunityForPenz.trim().toLowerCase() === "yes" && (
+                <>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">PENZ categories</label>
+                    <details className="mt-1 relative">
+                      <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
+                        {editPenzCategories.length ? editPenzCategories.join(", ") : "Select one or more…"}
+                      </summary>
+                      <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
+                        <div className="grid gap-2">
+                          {PENZ_CATEGORY_OPTIONS.map((opt) => (
+                            <label key={opt} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={editPenzCategories.includes(opt)}
+                                onChange={() => {
+                                  if (opt === "All") {
+                                    setEditPenzCategories((prev) =>
+                                      prev.includes("All") ? [] : Array.from(PENZ_CATEGORY_OPTIONS)
+                                    );
+                                  } else {
+                                    toggleMultiSelect(setEditPenzCategories, opt);
+                                    setEditPenzCategories((prev) => prev.filter((x) => x !== "All"));
+                                  }
+                                }}
+                              />
+                              <span>{opt}</span>
+                            </label>
+                          ))}
                         </div>
                       </div>
-                    )}
+                    </details>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Next step invite who from PENZ?</label>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                      value={editPenzInvite}
+                      onChange={(e) => setEditPenzInvite(e.target.value)}
+                      placeholder="Name(s)…"
+                    />
                   </div>
                 </>
               )}
