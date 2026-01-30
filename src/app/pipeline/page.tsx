@@ -431,13 +431,14 @@ export default function PipelinePage() {
       const MAX_OPPORTUNITIES = 2000;
       const { data, error } = await supabase
         .from("opportunities")
-        .select("*, accounts(id, name), branches(id, name)")
-        .order("created_at", { ascending: false })
+        .select(
+          "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, vehicle_brand, vehicle_model, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, notes, accounts(id, name), branches(id, name)"
+        )
         .limit(MAX_OPPORTUNITIES);
 
       if (error) throw new Error(error.message || "Failed to fetch opportunities");
 
-      setRows((data ?? []) as OpportunityRow[]);
+      setRows((data ?? []) as unknown as OpportunityRow[]);
     } catch (e) {
       console.error("Failed to fetch opportunities:", e);
       setDbError("Failed to load opportunities. Check database connection.");
