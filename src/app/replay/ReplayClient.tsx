@@ -18,8 +18,8 @@ type OpportunityEvent = {
   created_at: string;
   opportunity_id: string;
   event_type: "INSERT" | "UPDATE" | "DELETE";
-  old_row: any | null;
-  new_row: any | null;
+  old_row: unknown | null;
+  new_row: unknown | null;
   actor_user_id?: string | null;
 };
 
@@ -54,20 +54,21 @@ function clampProbTo01(p: unknown): number {
   return Math.min(1, n / 100);
 }
 
-function normalizeOpportunityRow(raw: any): Opportunity | null {
+function normalizeOpportunityRow(raw: unknown): Opportunity | null {
   if (!raw || typeof raw !== "object") return null;
-  const id = String(raw.id ?? "").trim();
+  const row = raw as Record<string, unknown>;
+  const id = String(row.id ?? "").trim();
   if (!id) return null;
 
   return {
     id,
-    stage: raw.stage ?? null,
-    close_date: raw.close_date ?? null,
-    rolling_12m_value: raw.rolling_12m_value == null ? null : Number(raw.rolling_12m_value),
-    probability: raw.probability == null ? null : Number(raw.probability),
-    created_at: raw.created_at ?? null,
-    next_action_due: raw.next_action_due ?? null,
-    next_action_completed_at: raw.next_action_completed_at ?? null,
+    stage: row.stage == null ? null : String(row.stage),
+    close_date: row.close_date == null ? null : String(row.close_date),
+    rolling_12m_value: row.rolling_12m_value == null ? null : Number(row.rolling_12m_value),
+    probability: row.probability == null ? null : Number(row.probability),
+    created_at: row.created_at == null ? null : String(row.created_at),
+    next_action_due: row.next_action_due == null ? null : String(row.next_action_due),
+    next_action_completed_at: row.next_action_completed_at == null ? null : String(row.next_action_completed_at),
   };
 }
 
