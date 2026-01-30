@@ -46,7 +46,9 @@ function isMissingTableError(message: string | null | undefined, table: string) 
 }
 
 async function checkSelect(supabase: Awaited<ReturnType<typeof supabaseServer>>, table: string, columns: string) {
-  return supabase.from(table).select(columns).limit(1);
+  // Use a HEAD request and limit(0) to validate schema (column/table existence)
+  // without scanning any rows. This keeps checks fast even with heavy RLS.
+  return supabase.from(table).select(columns, { head: true }).limit(0);
 }
 
 export default async function AdminSchemaPage() {
