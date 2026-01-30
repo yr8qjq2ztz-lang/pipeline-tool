@@ -14,7 +14,7 @@ export default function LazyOnVisible({
   minHeight?: number;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const [active, setActive] = useState(false);
+  const [active, setActive] = useState(() => typeof IntersectionObserver === "undefined");
 
   useEffect(() => {
     if (active) return;
@@ -22,11 +22,8 @@ export default function LazyOnVisible({
     const el = ref.current;
     if (!el) return;
 
-    // If IO isn't available, just render.
-    if (typeof IntersectionObserver === "undefined") {
-      setActive(true);
-      return;
-    }
+    // If IO isn't available, we should already be active from initial state.
+    if (typeof IntersectionObserver === "undefined") return;
 
     const observer = new IntersectionObserver(
       (entries) => {
