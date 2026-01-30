@@ -428,9 +428,12 @@ export default function PipelinePage() {
 
   async function fetchOpportunities() {
     try {
+      const MAX_OPPORTUNITIES = 2000;
       const { data, error } = await supabase
         .from("opportunities")
-        .select("*, accounts(id, name), branches(id, name)");
+        .select("*, accounts(id, name), branches(id, name)")
+        .order("created_at", { ascending: false })
+        .limit(MAX_OPPORTUNITIES);
 
       if (error) throw new Error(error.message || "Failed to fetch opportunities");
 
