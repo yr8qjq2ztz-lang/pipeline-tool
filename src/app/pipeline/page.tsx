@@ -50,6 +50,8 @@ type LoadStatus = {
   opportunities: LoadState;
 };
 
+type AuthStatus = "checking" | "has-session" | "no-session" | "error" | "timeout";
+
 const STAGES = [
   "Prospecting",
   "Qualified",
@@ -184,6 +186,8 @@ export default function PipelinePage() {
     accounts: "idle",
     opportunities: "idle",
   });
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
+  const [authEvent, setAuthEvent] = useState<AuthChangeEvent | null>(null);
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -563,25 +567,54 @@ export default function PipelinePage() {
     // Don’t rely solely on the INITIAL_SESSION event; fetch session immediately.
     (async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
+        const timeoutMs = Number(process.env.NEXT_PUBLIC_PIPELINE_AUTH_TIMEOUT_MS ?? 15_000);
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return;
+          timeoutId = setTimeout(() => {
+            const err = new Error(`Auth session check timed out after ${Math.round(timeoutMs / 1000)}s`);
+            (err as Error & { name?: string }).name = "TimeoutError";
+            setAuthStatus("timeout");
+            reject(err);
+          }, timeoutMs);
+        });
+
+        const sessionPromise = supabase.auth.getSession();
+        const { data, error } = await Promise.race([sessionPromise, timeoutPromise]);
+        if (timeoutId) clearTimeout(timeoutId);
+
         if (error) {
           setDbError(error.message);
+          setAuthStatus("error");
           setLoading(false);
           return;
         }
+
+        if (!data.session) {
+          setAuthStatus("no-session");
+        } else {
+          setAuthStatus("has-session");
+        }
+
         await loadForSession(data.session ?? null);
       } catch (e: unknown) {
         setDbError(getErrorMessage(e));
+        if ((e as Error | null)?.name !== "TimeoutError") {
+          setAuthStatus("error");
+        }
         setLoading(false);
       }
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      setAuthEvent(event);
       if (event === "SIGNED_OUT") {
+        setAuthStatus("no-session");
         router.replace("/login");
         return;
       }
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        setAuthStatus(session ? "has-session" : "no-session");
         setCurrentUserId(session?.user?.id ?? "");
         setCurrentUserEmail(session?.user?.email ?? "");
       }
@@ -1538,6 +1571,8 @@ export default function PipelinePage() {
           <p className="font-semibold text-slate-800 dark:text-slate-100">Loading pipeline…</p>
           <p className="text-sm text-slate-700 dark:text-slate-300 mt-2">Fetching your data</p>
           <div className="mt-4 text-xs text-slate-600 dark:text-slate-300">
+            <div>Auth status: {authStatus}</div>
+            <div>Auth event: {authEvent ?? "(none)"}</div>
             <div>Branches: {loadStatus.branches}</div>
             <div>Accounts: {loadStatus.accounts}</div>
             <div>Opportunities: {loadStatus.opportunities}</div>
