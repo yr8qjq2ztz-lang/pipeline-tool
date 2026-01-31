@@ -43,6 +43,13 @@ type OpportunityRow = {
   branches?: { id: string; name: string } | null;
 };
 
+type LoadState = "idle" | "loading" | "ok" | "error" | "timeout";
+type LoadStatus = {
+  branches: LoadState;
+  accounts: LoadState;
+  opportunities: LoadState;
+};
+
 const STAGES = [
   "Prospecting",
   "Qualified",
@@ -172,6 +179,11 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [loadStatus, setLoadStatus] = useState<LoadStatus>({
+    branches: "idle",
+    accounts: "idle",
+    opportunities: "idle",
+  });
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -365,98 +377,133 @@ export default function PipelinePage() {
     }
   }
 
+  function withLoadStatus<T>(label: keyof LoadStatus, action: () => Promise<T>): Promise<T> {
+    setLoadStatus((prev) => ({ ...prev, [label]: "loading" }));
+    const timeoutMs = Number(process.env.NEXT_PUBLIC_PIPELINE_LOAD_TIMEOUT_MS ?? 25_000);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return;
+      timeoutId = setTimeout(() => {
+        const err = new Error(`${label} fetch timed out after ${Math.round(timeoutMs / 1000)}s`);
+        (err as Error & { name?: string }).name = "TimeoutError";
+        setLoadStatus((prev) => ({ ...prev, [label]: "timeout" }));
+        reject(err);
+      }, timeoutMs);
+    });
+
+    return Promise.race([action(), timeoutPromise])
+      .then((result) => {
+        if (timeoutId) clearTimeout(timeoutId);
+        setLoadStatus((prev) => ({ ...prev, [label]: "ok" }));
+        return result as T;
+      })
+      .catch((err) => {
+        if (timeoutId) clearTimeout(timeoutId);
+        const isTimeout = (err as Error | null)?.name === "TimeoutError" || /timed out/i.test(String(err));
+        setLoadStatus((prev) => ({ ...prev, [label]: isTimeout ? "timeout" : "error" }));
+        throw err;
+      });
+  }
+
   async function fetchBranches() {
-    try {
-      const { data, error } = await supabase
-        .from("branches")
-        .select("id,name")
-        .order("name", { ascending: true });
+    return withLoadStatus("branches", async () => {
+      try {
+        const { data, error } = await supabase
+          .from("branches")
+          .select("id,name")
+          .order("name", { ascending: true });
 
-      if (error) throw new Error(error.message || "Failed to fetch branches");
+        if (error) throw new Error(error.message || "Failed to fetch branches");
 
-      const list = (data ?? []) as Branch[];
-      if (list.length === 0) {
-        console.warn("No branches found in database");
-      }
-      const wanted = "National Account/Head Office";
-      const hasWanted = list.some((b) => b.name.trim().toLowerCase() === wanted.toLowerCase());
-
-      if (!hasWanted) {
-        try {
-          const { data: created, error: createErr } = await supabase
-            .from("branches")
-            .insert({ name: wanted })
-            .select("id,name")
-            .single();
-
-          if (createErr) {
-            console.warn(
-              `Could not auto-create branch "${wanted}". Add it in the branches table to show it in dropdowns.`,
-              createErr
-            );
-            setBranches(list);
-            if (!createBranchId && list.length) setCreateBranchId(list[0].id);
-            return;
-          }
-
-          const next = [...list, (created as Branch)].sort((a, b) => a.name.localeCompare(b.name));
-          setBranches(next);
-          if (!createBranchId && next.length) setCreateBranchId(next[0].id);
-          return;
-        } catch (e) {
-          console.warn(`Branch seed for "${wanted}" failed.`, e);
+        const list = (data ?? []) as Branch[];
+        if (list.length === 0) {
+          console.warn("No branches found in database");
         }
-      }
+        const wanted = "National Account/Head Office";
+        const hasWanted = list.some((b) => b.name.trim().toLowerCase() === wanted.toLowerCase());
 
-      setBranches(list);
-      if (!createBranchId && list.length) setCreateBranchId(list[0].id);
-    } catch (e) {
-      console.error("Failed to fetch branches:", e);
-      setDbError("Failed to load branches. Check database connection.");
-      throw e;
-    }
+        if (!hasWanted) {
+          try {
+            const { data: created, error: createErr } = await supabase
+              .from("branches")
+              .insert({ name: wanted })
+              .select("id,name")
+              .single();
+
+            if (createErr) {
+              console.warn(
+                `Could not auto-create branch "${wanted}". Add it in the branches table to show it in dropdowns.`,
+                createErr
+              );
+              setBranches(list);
+              if (!createBranchId && list.length) setCreateBranchId(list[0].id);
+              return;
+            }
+
+            const next = [...list, (created as Branch)].sort((a, b) => a.name.localeCompare(b.name));
+            setBranches(next);
+            if (!createBranchId && next.length) setCreateBranchId(next[0].id);
+            return;
+          } catch (e) {
+            console.warn(`Branch seed for "${wanted}" failed.`, e);
+          }
+        }
+
+        setBranches(list);
+        if (!createBranchId && list.length) setCreateBranchId(list[0].id);
+      } catch (e) {
+        console.error("Failed to fetch branches:", e);
+        setDbError("Failed to load branches. Check database connection.");
+        throw e;
+      }
+    });
   }
 
   async function fetchAccounts() {
-    try {
-      const { data, error } = await supabase
-        .from("accounts")
-        .select("id,name")
-        .order("created_at", { ascending: false })
-        .limit(500);
+    return withLoadStatus("accounts", async () => {
+      try {
+        const { data, error } = await supabase
+          .from("accounts")
+          .select("id,name")
+          .order("created_at", { ascending: false })
+          .limit(500);
 
-      if (error) throw new Error(error.message || "Failed to fetch accounts");
-      
-      if (!data?.length) {
-        console.warn("No accounts found in database");
+        if (error) throw new Error(error.message || "Failed to fetch accounts");
+
+        if (!data?.length) {
+          console.warn("No accounts found in database");
+        }
+        setAccounts((data ?? []) as Account[]);
+      } catch (e) {
+        console.error("Failed to fetch accounts:", e);
+        setDbError("Failed to load accounts. Check database connection.");
+        throw e;
       }
-      setAccounts((data ?? []) as Account[]);
-    } catch (e) {
-      console.error("Failed to fetch accounts:", e);
-      setDbError("Failed to load accounts. Check database connection.");
-      throw e;
-    }
+    });
   }
 
   async function fetchOpportunities() {
-    try {
-      const MAX_OPPORTUNITIES = 2000;
-      const { data, error } = await supabase
-        .from("opportunities")
-        .select(
-          // Avoid relationship joins here; they can be slow and we already fetch accounts/branches separately.
-          "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, vehicle_brand, vehicle_model, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, notes"
-        )
-        .limit(MAX_OPPORTUNITIES);
+    return withLoadStatus("opportunities", async () => {
+      try {
+        const MAX_OPPORTUNITIES = 2000;
+        const { data, error } = await supabase
+          .from("opportunities")
+          .select(
+            // Avoid relationship joins here; they can be slow and we already fetch accounts/branches separately.
+            "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, vehicle_brand, vehicle_model, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, notes"
+          )
+          .limit(MAX_OPPORTUNITIES);
 
-      if (error) throw new Error(error.message || "Failed to fetch opportunities");
+        if (error) throw new Error(error.message || "Failed to fetch opportunities");
 
-      setRows((data ?? []) as unknown as OpportunityRow[]);
-    } catch (e) {
-      console.error("Failed to fetch opportunities:", e);
-      setDbError("Failed to load opportunities. Check database connection.");
-      throw e;
-    }
+        setRows((data ?? []) as unknown as OpportunityRow[]);
+      } catch (e) {
+        console.error("Failed to fetch opportunities:", e);
+        setDbError("Failed to load opportunities. Check database connection.");
+        throw e;
+      }
+    });
   }
 
   // Keyboard shortcuts
@@ -1490,6 +1537,12 @@ export default function PipelinePage() {
         <div className="text-center">
           <p className="font-semibold text-slate-800 dark:text-slate-100">Loading pipeline…</p>
           <p className="text-sm text-slate-700 dark:text-slate-300 mt-2">Fetching your data</p>
+          <div className="mt-4 text-xs text-slate-600 dark:text-slate-300">
+            <div>Branches: {loadStatus.branches}</div>
+            <div>Accounts: {loadStatus.accounts}</div>
+            <div>Opportunities: {loadStatus.opportunities}</div>
+            {dbError && <div className="mt-2 text-red-600 break-words">{dbError}</div>}
+          </div>
         </div>
       </div>
     );
