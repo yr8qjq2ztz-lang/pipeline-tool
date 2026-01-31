@@ -491,13 +491,21 @@ export default function PipelinePage() {
     return withLoadStatus("opportunities", async () => {
       try {
         const MAX_OPPORTUNITIES = 2000;
-        const { data, error } = await supabase
-          .from("opportunities")
-          .select(
-            // Avoid relationship joins here; they can be slow and we already fetch accounts/branches separately.
-            "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, vehicle_brand, vehicle_model, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, notes"
-          )
-          .limit(MAX_OPPORTUNITIES);
+        const baseSelect =
+          // Avoid relationship joins here; they can be slow and we already fetch accounts/branches separately.
+          "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, vehicle_brand, vehicle_model, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, notes";
+
+        const runQuery = (select: string) =>
+          supabase.from("opportunities").select(select).limit(MAX_OPPORTUNITIES);
+
+        let { data, error } = await runQuery(baseSelect);
+
+        if (error && /next_action_completed_by/i.test(error.message) && /does not exist/i.test(error.message)) {
+          const fallbackSelect = baseSelect.replace(", next_action_completed_by", "");
+          const retry = await runQuery(fallbackSelect);
+          data = retry.data;
+          error = retry.error;
+        }
 
         if (error) throw new Error(error.message || "Failed to fetch opportunities");
 
