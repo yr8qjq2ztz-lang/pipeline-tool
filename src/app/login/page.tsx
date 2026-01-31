@@ -45,11 +45,16 @@ export default function LoginPage() {
         setChecking(false);
         if (session) router.replace("/pipeline");
       }
+      if (event === "SIGNED_IN") {
+        setChecking(false);
+        if (session) router.replace("/pipeline");
+      }
     });
 
     supabase.auth.getSession().then(({ data }) => {
       setSessionEmail(data.session?.user?.email ?? null);
       setChecking(false);
+      if (data.session) router.replace("/pipeline");
     });
 
     return () => sub.subscription.unsubscribe();
@@ -214,6 +219,15 @@ export default function LoginPage() {
           >
             Check session
           </button>
+          {sessionEmail && (
+            <button
+              className="mt-2 ml-3 underline"
+              type="button"
+              onClick={() => router.replace("/pipeline")}
+            >
+              Continue to pipeline
+            </button>
+          )}
         </div>
       </div>
     </div>
