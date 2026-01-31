@@ -1564,6 +1564,23 @@ export default function PipelinePage() {
     await quickUpdateStage(id, stage);
   }
 
+  if (authStatus === "no-session") {
+    return (
+      <div className="p-6 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="font-semibold text-slate-800 dark:text-slate-100">You’re signed out</p>
+          <p className="text-sm text-slate-700 dark:text-slate-300 mt-2">Please sign in to view your pipeline.</p>
+          <button
+            className="mt-4 rounded-lg bg-black text-white px-4 py-2 text-sm"
+            onClick={() => router.replace("/login")}
+          >
+            Go to login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="p-6 min-h-screen flex items-center justify-center">
