@@ -32,6 +32,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   // Wait for Supabase auth to initialize before doing anything clever.
   useEffect(() => {
@@ -49,6 +50,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setInfo(null);
+    setSubmitting(true);
 
     if (!supabase) {
       setError("Authentication not initialized. Please refresh.");
@@ -88,6 +90,12 @@ export default function LoginPage() {
           // localStorage might be disabled
         }
         
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          setError("Signed in but no session found. Check your email confirmation or try again.");
+          return;
+        }
+
         router.replace("/pipeline");
         return;
       }
@@ -111,6 +119,8 @@ export default function LoginPage() {
         console.error("Auth error:", err);
       }
       setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -125,23 +135,27 @@ export default function LoginPage() {
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <div>
-            <label className="text-sm">Email</label>
+            <label className="text-sm" htmlFor="login-email">Email</label>
             <input
               className="mt-1 w-full rounded-lg border px-3 py-2"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               type="email"
+              id="login-email"
+              name="email"
               required
             />
           </div>
 
           <div>
-            <label className="text-sm">Password</label>
+            <label className="text-sm" htmlFor="login-password">Password</label>
             <input
               className="mt-1 w-full rounded-lg border px-3 py-2"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               type="password"
+              id="login-password"
+              name="password"
               required
             />
           </div>
@@ -162,7 +176,7 @@ export default function LoginPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           {info && <p className="text-sm">{info}</p>}
 
-          <button className="w-full rounded-lg bg-black text-white py-2">
+          <button className="w-full rounded-lg bg-black text-white py-2" disabled={submitting}>
             {mode === "login" ? "Sign in" : "Sign up"}
           </button>
         </form>
