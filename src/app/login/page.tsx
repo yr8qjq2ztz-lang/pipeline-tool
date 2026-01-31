@@ -33,14 +33,23 @@ export default function LoginPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [lastAuthEvent, setLastAuthEvent] = useState<AuthChangeEvent | null>(null);
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
 
   // Wait for Supabase auth to initialize before doing anything clever.
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      setLastAuthEvent(event);
+      setSessionEmail(session?.user?.email ?? null);
       if (event === "INITIAL_SESSION") {
         setChecking(false);
         if (session) router.replace("/pipeline");
       }
+    });
+
+    supabase.auth.getSession().then(({ data }) => {
+      setSessionEmail(data.session?.user?.email ?? null);
+      setChecking(false);
     });
 
     return () => sub.subscription.unsubscribe();
@@ -96,6 +105,7 @@ export default function LoginPage() {
           return;
         }
 
+        setInfo("Signed in. Redirecting…");
         router.replace("/pipeline");
         return;
       }
@@ -189,6 +199,22 @@ export default function LoginPage() {
             ? "Need an account? Sign up"
             : "Already have an account? Sign in"}
         </button>
+
+        <div className="mt-6 rounded-lg border bg-gray-50 p-3 text-xs text-gray-700">
+          <div>Auth event: {lastAuthEvent ?? "(none)"}</div>
+          <div>Session email: {sessionEmail ?? "(none)"}</div>
+          <button
+            className="mt-2 underline"
+            type="button"
+            onClick={async () => {
+              const { data } = await supabase.auth.getSession();
+              setSessionEmail(data.session?.user?.email ?? null);
+              setInfo(data.session ? "Session found." : "No session found.");
+            }}
+          >
+            Check session
+          </button>
+        </div>
       </div>
     </div>
   );
