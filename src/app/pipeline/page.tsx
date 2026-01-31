@@ -167,7 +167,7 @@ function isActiveStage(stage: string | null) {
 
 export default function PipelinePage() {
   const router = useRouter();
-  const supabase = supabaseBrowser();
+  const supabase = useMemo(() => supabaseBrowser(), []);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -324,6 +324,18 @@ export default function PipelinePage() {
     return map;
   }, [accounts]);
 
+  const accountIdToName = useMemo(() => {
+    const map = new Map<string, string>();
+    accounts.forEach((a) => map.set(a.id, a.name));
+    return map;
+  }, [accounts]);
+
+  const branchIdToName = useMemo(() => {
+    const map = new Map<string, string>();
+    branches.forEach((b) => map.set(b.id, b.name));
+    return map;
+  }, [branches]);
+
   async function ensureSignedInOrBounce(): Promise<boolean> {
     try {
       const { data } = await supabase.auth.getSession();
@@ -432,7 +444,8 @@ export default function PipelinePage() {
       const { data, error } = await supabase
         .from("opportunities")
         .select(
-          "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, vehicle_brand, vehicle_model, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, notes, accounts(id, name), branches(id, name)"
+          // Avoid relationship joins here; they can be slow and we already fetch accounts/branches separately.
+          "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, vehicle_brand, vehicle_model, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, notes"
         )
         .limit(MAX_OPPORTUNITIES);
 
@@ -479,28 +492,58 @@ export default function PipelinePage() {
   }
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
-      if (event !== "INITIAL_SESSION") return;
+    let cancelled = false;
 
+    const loadForSession = async (session: Session | null) => {
       if (!session) {
         router.replace("/login");
         return;
       }
 
       try {
-        setCurrentUserId(session?.user?.id ?? "");
-        setCurrentUserEmail(session?.user?.email ?? "");
+        setCurrentUserId(session.user?.id ?? "");
+        setCurrentUserEmail(session.user?.email ?? "");
         setDbError(null);
         setLoading(true);
         await Promise.all([fetchBranches(), fetchAccounts(), fetchOpportunities()]);
       } catch (e: unknown) {
         setDbError(getErrorMessage(e));
       } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    // Don’t rely solely on the INITIAL_SESSION event; fetch session immediately.
+    (async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          setDbError(error.message);
+          setLoading(false);
+          return;
+        }
+        await loadForSession(data.session ?? null);
+      } catch (e: unknown) {
+        setDbError(getErrorMessage(e));
         setLoading(false);
+      }
+    })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      if (event === "SIGNED_OUT") {
+        router.replace("/login");
+        return;
+      }
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        setCurrentUserId(session?.user?.id ?? "");
+        setCurrentUserEmail(session?.user?.email ?? "");
       }
     });
 
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -519,7 +562,10 @@ export default function PipelinePage() {
         .limit(1);
 
       if (findError) throw new Error(findError.message || "Failed to search accounts");
-      if (found && found.length) return found[0].id;
+      if (found && found.length) {
+        const id = (found[0] as unknown as { id?: unknown }).id;
+        if (typeof id === "string") return id;
+      }
 
       const { data: created, error: createError } = await supabase
         .from("accounts")
@@ -532,8 +578,9 @@ export default function PipelinePage() {
         .single();
 
       if (createError) throw new Error(createError.message || "Failed to create account");
-      if (!created?.id) throw new Error("Account created but ID not returned");
-      return created.id;
+      const createdId = (created as unknown as { id?: unknown } | null)?.id;
+      if (typeof createdId !== "string") throw new Error("Account created but ID not returned");
+      return createdId;
     } catch (e) {
       console.error("Account operation failed:", e);
       throw e;
@@ -706,7 +753,7 @@ export default function PipelinePage() {
   function openEdit(row: OpportunityRow) {
     setEditError(null);
     setEditId(row.id);
-    setEditAccountName(row.accounts?.name ?? "(unknown)");
+    setEditAccountName(accountIdToName.get(row.account_id) ?? "(unknown)");
     setEditBranchId(row.branch_id ?? "");
     setEditStage(parseStage(row.stage ?? "Prospecting"));
     setEditCloseDate(row.close_date ?? "");
@@ -1148,7 +1195,7 @@ export default function PipelinePage() {
       }
 
       if (q) {
-        const name = (r.accounts?.name ?? "").toLowerCase();
+        const name = (accountIdToName.get(r.account_id) ?? "").toLowerCase();
         if (!name.includes(q)) return false;
       }
 
@@ -1158,7 +1205,7 @@ export default function PipelinePage() {
 
       return true;
     });
-  }, [rows, filterBranchId, filterStage, filterSalesPerson, filterBatterySolution, filterOwner, ownerFieldAvailable, currentUserId, filterProbBand, filterCloseWindow, filterHealth, search, today, in30, in60]);
+  }, [rows, filterBranchId, filterStage, filterSalesPerson, filterBatterySolution, filterOwner, ownerFieldAvailable, currentUserId, filterProbBand, filterCloseWindow, filterHealth, search, today, in30, in60, accountIdToName]);
 
   async function markNextActionDone(id: string, opts?: { note?: string | null }) {
     const ok = await ensureSignedInOrBounce();
@@ -1408,11 +1455,11 @@ export default function PipelinePage() {
 
   // Helper functions for safe data access
   function getAccountName(o: OpportunityRow): string {
-    return o?.accounts?.name ?? "(Unknown account)";
+    return accountIdToName.get(o.account_id) ?? "(Unknown account)";
   }
 
   function getBranchName(o: OpportunityRow): string {
-    return o?.branches?.name ?? "-";
+    return o.branch_id ? branchIdToName.get(o.branch_id) ?? "-" : "-";
   }
 
   function onCardDragStart(e: React.DragEvent, id: string) {
