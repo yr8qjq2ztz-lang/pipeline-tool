@@ -514,6 +514,13 @@ export default function PipelinePage() {
           error = retry.error;
         }
 
+        if (error && /sales_person/i.test(error.message) && /does not exist/i.test(error.message)) {
+          const fallbackSelect = baseSelect.replace(", sales_person", "");
+          const retry = await runQuery(fallbackSelect);
+          data = retry.data;
+          error = retry.error;
+        }
+
         if (error) throw new Error(error.message || "Failed to fetch opportunities");
 
         setRows((data ?? []) as unknown as OpportunityRow[]);
