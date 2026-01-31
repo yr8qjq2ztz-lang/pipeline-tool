@@ -1,4 +1,4 @@
-﻿import { createClient } from "@supabase/supabase-js";
+﻿import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type LooseRow = Record<string, unknown>;
@@ -81,7 +81,7 @@ export function supabaseBrowser() {
   }
 
   if (browserClient) return browserClient;
-  browserClient = createClient<LooseDatabase>(url, key, {
+  browserClient = createBrowserClient<LooseDatabase>(url, key, {
     global: {
       fetch: fetchWithTimeout,
     },
