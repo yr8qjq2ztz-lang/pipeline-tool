@@ -906,57 +906,62 @@ export default function PipelinePage() {
         } else {
         if (/sales_person/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "Sales person field isn't in your database yet. Add a nullable text column on opportunities: sales_person."
+            "Sales person field isn't in your database yet. Add a nullable text column on opportunities: sales_person (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution (or run SUPABASE_SQL_battery_solution.sql)."
+            "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
+          );
+        }
+        if (/branch_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Branch field isn't in your database yet. Add a nullable uuid column on opportunities: branch_id (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/how_we_win/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "How we win field isn't in your database yet. Add a nullable text column on opportunities: how_we_win."
+            "How we win field isn't in your database yet. Add a nullable text column on opportunities: how_we_win (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/opportunity_for_bnt/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bnt (or run SUPABASE_SQL_bnt_penz.sql)."
+            "BNT opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bnt (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/bnt_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT categories field isn't in your database yet. Add a nullable text column on opportunities: bnt_categories (or run SUPABASE_SQL_bnt_penz.sql)."
+            "BNT categories field isn't in your database yet. Add a nullable text column on opportunities: bnt_categories (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/bnt_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT invite field isn't in your database yet. Add a nullable text column on opportunities: bnt_invite (or run SUPABASE_SQL_bnt_penz.sql)."
+            "BNT invite field isn't in your database yet. Add a nullable text column on opportunities: bnt_invite (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/opportunity_for_penz/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_penz (or run SUPABASE_SQL_bnt_penz.sql)."
+            "PENZ opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_penz (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/penz_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ categories field isn't in your database yet. Add a nullable text column on opportunities: penz_categories (or run SUPABASE_SQL_bnt_penz.sql)."
+            "PENZ categories field isn't in your database yet. Add a nullable text column on opportunities: penz_categories (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/penz_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite (or run SUPABASE_SQL_bnt_penz.sql)."
+            "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/opportunity_for_bapcor_rebate/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "Bapcor Rebate opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bapcor_rebate."
+            "Bapcor Rebate opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bapcor_rebate (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/bapcor_rebate_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "Bapcor Rebate invite field isn't in your database yet. Add a nullable text column on opportunities: bapcor_rebate_invite (or run SUPABASE_SQL_bapcor_rebate.sql)."
+            "Bapcor Rebate invite field isn't in your database yet. Add a nullable text column on opportunities: bapcor_rebate_invite (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
           throw new Error(error.message || msg);
@@ -1227,7 +1232,13 @@ export default function PipelinePage() {
         let msg = error.message || "Failed to update opportunity";
         if (/sales_person/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "Sales person field isn't in your database yet. Add a nullable text column on opportunities: sales_person."
+            "Sales person field isn't in your database yet. Add a nullable text column on opportunities: sales_person (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
+          );
+        }
+
+        if (/branch_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Branch field isn't in your database yet. Add a nullable uuid column on opportunities: branch_id (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
 
@@ -1244,48 +1255,48 @@ export default function PipelinePage() {
 
         if (/how_we_win/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "How we win field isn't in your database yet. Add a nullable text column on opportunities: how_we_win."
+            "How we win field isn't in your database yet. Add a nullable text column on opportunities: how_we_win (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/opportunity_for_bnt/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bnt (or run SUPABASE_SQL_bnt_penz.sql)."
+            "BNT opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bnt (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/bnt_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT categories field isn't in your database yet. Add a nullable text column on opportunities: bnt_categories (or run SUPABASE_SQL_bnt_penz.sql)."
+            "BNT categories field isn't in your database yet. Add a nullable text column on opportunities: bnt_categories (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/bnt_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT invite field isn't in your database yet. Add a nullable text column on opportunities: bnt_invite (or run SUPABASE_SQL_bnt_penz.sql)."
+            "BNT invite field isn't in your database yet. Add a nullable text column on opportunities: bnt_invite (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/opportunity_for_penz/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_penz (or run SUPABASE_SQL_bnt_penz.sql)."
+            "PENZ opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_penz (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/penz_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ categories field isn't in your database yet. Add a nullable text column on opportunities: penz_categories (or run SUPABASE_SQL_bnt_penz.sql)."
+            "PENZ categories field isn't in your database yet. Add a nullable text column on opportunities: penz_categories (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/penz_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite (or run SUPABASE_SQL_bnt_penz.sql)."
+            "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
 
         if (/opportunity_for_bapcor_rebate/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "Bapcor Rebate opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bapcor_rebate."
+            "Bapcor Rebate opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bapcor_rebate (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
         if (/bapcor_rebate_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "Bapcor Rebate invite field isn't in your database yet. Add a nullable text column on opportunities: bapcor_rebate_invite."
+            "Bapcor Rebate invite field isn't in your database yet. Add a nullable text column on opportunities: bapcor_rebate_invite (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
 
@@ -1321,7 +1332,7 @@ export default function PipelinePage() {
 
         if (/battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution (or run SUPABASE_SQL_battery_solution.sql)."
+            "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution (or run SUPABASE_SQL_pipeline_optional_fields.sql)."
           );
         }
 
@@ -2561,7 +2572,7 @@ export default function PipelinePage() {
                 <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
                   {createOpportunityForBapcorRebate.trim()
                     ? createOpportunityForBapcorRebate.trim()
-                    : "Select Yes / No / Unsure…"}
+                    : "(select)"}
                   {createOpportunityForBapcorRebate.trim() && createBapcorRebateInvite.trim()
                     ? ` — bring in: ${createBapcorRebateInvite.trim()}`
                     : ""}
@@ -3273,7 +3284,7 @@ export default function PipelinePage() {
                   <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
                     {editOpportunityForBapcorRebate.trim()
                       ? editOpportunityForBapcorRebate.trim()
-                      : "Select Yes / No / Unsure…"}
+                      : "(select)"}
                     {editOpportunityForBapcorRebate.trim() && editBapcorRebateInvite.trim()
                       ? ` — bring in: ${editBapcorRebateInvite.trim()}`
                       : ""}

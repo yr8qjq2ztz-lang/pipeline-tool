@@ -8,6 +8,10 @@ Run these in the Supabase **SQL Editor** (in any order). Each script is idempote
 
 ## Optional feature columns
 
+- Pipeline optional fields (recommended one-shot)
+  - Script: `SUPABASE_SQL_pipeline_optional_fields.sql`
+  - Adds: `opportunities.branch_id` (uuid) + `sales_person`, `battery_solution`, `how_we_win`, `opportunity_for_bnt`, `bnt_categories`, `bnt_invite`, `opportunity_for_penz`, `penz_categories`, `penz_invite`, `opportunity_for_bapcor_rebate`, `bapcor_rebate_invite` (text)
+
 - BNT + PENZ (recommended one-shot)
   - Script: `SUPABASE_SQL_bnt_penz.sql`
   - Adds: `opportunities.opportunity_for_bnt`, `opportunities.bnt_categories`, `opportunities.bnt_invite`, `opportunities.opportunity_for_penz`, `opportunities.penz_categories`, `opportunities.penz_invite` (text)
