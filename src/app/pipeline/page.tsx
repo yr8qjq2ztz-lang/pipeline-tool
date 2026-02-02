@@ -28,8 +28,6 @@ type OpportunityRow = {
   owner_user_id?: string | null;
   sales_person?: string | null;
   battery_solution?: string | null;
-  vehicle_brand?: string | null;
-  vehicle_model?: string | null;
   how_we_win?: string | null;
   opportunity_for_bnt?: string | null;
   bnt_categories?: string | null;
@@ -75,8 +73,6 @@ const BATTERY_SOLUTIONS = [
 ] as const;
 
 const HOW_WE_WIN_OPTIONS = [
-  "Quality / performance",
-  "Convenience / ease (time, effort, access)",
   "Price / value for money (including deals)",
   "Trust / credibility",
   "Recommendation",
@@ -517,7 +513,7 @@ export default function PipelinePage() {
         const MAX_OPPORTUNITIES = 2000;
         const baseSelect =
           // Avoid relationship joins here; they can be slow and we already fetch accounts/branches separately.
-          "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, vehicle_brand, vehicle_model, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, opportunity_for_bapcor_rebate, bapcor_rebate_invite, notes";
+          "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, opportunity_for_bapcor_rebate, bapcor_rebate_invite, notes";
 
         const runQuery = (select: string) =>
           supabase.from("opportunities").select(select).limit(MAX_OPPORTUNITIES);
@@ -1212,12 +1208,6 @@ export default function PipelinePage() {
           editOpportunityForBapcorRebate.trim().toLowerCase() === "unsure"
             ? editBapcorRebateInvite.trim() || null
             : null,
-        ...(editBatterySolutions.includes("Commercial Vehicles and Fleets")
-          ? {}
-          : {
-              vehicle_brand: null,
-              vehicle_model: null,
-            }),
         notes: editNotes.trim() || null,
       } as Record<string, unknown>;
 
