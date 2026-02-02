@@ -16,6 +16,10 @@ Run these in the Supabase **SQL Editor** (in any order). Each script is idempote
   - Script: `SUPABASE_SQL_battery_solution.sql`
   - Adds: `opportunities.battery_solution` (text)
 
+- BNT opportunity
+  - Script: `SUPABASE_SQL_opportunity_for_bnt.sql`
+  - Adds: `opportunities.opportunity_for_bnt` (text)
+
 - BNT categories
   - Script: `SUPABASE_SQL_bnt_categories.sql`
   - Adds: `opportunities.bnt_categories` (text)
