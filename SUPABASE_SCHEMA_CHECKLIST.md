@@ -32,7 +32,21 @@ Run these in the Supabase **SQL Editor** (in any order). Each script is idempote
   - Script: `SUPABASE_SQL_owner_user_id.sql`
   - Adds: `opportunities.owner_user_id` (uuid)
 
+- Bapcor Rebate (sub-form)
+  - Script: `SUPABASE_SQL_bapcor_rebate.sql`
+  - Adds: `opportunities.opportunity_for_bapcor_rebate`, `opportunities.bapcor_rebate_invite` (text)
+
 ## Notes
 
 - The app is designed to **degrade gracefully** if optional columns aren’t present (it will hide related UI or retry writes without those fields).
 - If you enable `owner_user_id`, you may want to update your RLS policies to allow setting/changing it according to your rules (e.g. only the current owner can change it).
+
+## Access control (recommended)
+
+- Restrict who can sign up
+  - Script: `SUPABASE_SQL_auth_before_user_created_domain_allowlist.sql`
+  - Enables a “Before User Created” auth hook allowlisting `hcb.co.nz`, `bapcor.com`, plus specific email exceptions.
+
+- Allow creating accounts during opportunity creation
+  - Script: `SUPABASE_SQL_rls_accounts_insert_allowed_domains.sql`
+  - Fixes: `new row violates row-level security policy for table "accounts"`

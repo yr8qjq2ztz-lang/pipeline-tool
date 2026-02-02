@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
@@ -37,6 +37,8 @@ type OpportunityRow = {
   opportunity_for_penz?: string | null;
   penz_categories?: string | null;
   penz_invite?: string | null;
+  opportunity_for_bapcor_rebate?: string | null;
+  bapcor_rebate_invite?: string | null;
   notes: string | null;
 
   accounts?: { id: string; name: string } | null;
@@ -225,6 +227,8 @@ export default function PipelinePage() {
   const [createOpportunityForPenz, setCreateOpportunityForPenz] = useState<string>("");
   const [createPenzCategories, setCreatePenzCategories] = useState<string[]>([]);
   const [createPenzInvite, setCreatePenzInvite] = useState<string>("");
+  const [createOpportunityForBapcorRebate, setCreateOpportunityForBapcorRebate] = useState<string>("");
+  const [createBapcorRebateInvite, setCreateBapcorRebateInvite] = useState<string>("");
   const [createNotes, setCreateNotes] = useState<string>("");
 
   // ---- Edit modal state ----
@@ -256,7 +260,18 @@ export default function PipelinePage() {
   const [editOpportunityForPenz, setEditOpportunityForPenz] = useState<string>("");
   const [editPenzCategories, setEditPenzCategories] = useState<string[]>([]);
   const [editPenzInvite, setEditPenzInvite] = useState<string>("");
+  const [editOpportunityForBapcorRebate, setEditOpportunityForBapcorRebate] = useState<string>("");
+  const [editBapcorRebateInvite, setEditBapcorRebateInvite] = useState<string>("");
   const [editNotes, setEditNotes] = useState<string>("");
+
+  const createBntCategoriesDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const createPenzCategoriesDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const editBntCategoriesDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const editPenzCategoriesDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const createHowWeWinDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const editHowWeWinDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const createBapcorRebateDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const editBapcorRebateDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
   function toggleMultiSelect(setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) {
     setter((prev) => (prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]));
@@ -297,6 +312,13 @@ export default function PipelinePage() {
         ? ` (${cats.slice(0, 2).join(", ")}${cats.length > 2 ? ` +${cats.length - 2}` : ""})`
         : "";
       out.push(`PENZ${catText}`);
+    }
+
+    const bapcor = String(o.opportunity_for_bapcor_rebate ?? "").trim();
+    if (bapcor.toLowerCase() === "yes") {
+      const who = String(o.bapcor_rebate_invite ?? "").trim();
+      const whoText = who ? ` (bring in: ${who.slice(0, 40)}${who.length > 40 ? "…" : ""})` : "";
+      out.push(`Bapcor Rebate${whoText}`);
     }
 
     return out;
@@ -493,32 +515,74 @@ export default function PipelinePage() {
         const MAX_OPPORTUNITIES = 2000;
         const baseSelect =
           // Avoid relationship joins here; they can be slow and we already fetch accounts/branches separately.
-          "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, vehicle_brand, vehicle_model, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, notes";
+          "id, account_id, branch_id, stage, close_date, rolling_12m_value, probability, next_action, next_action_due, next_action_completed_at, next_action_completed_by, next_action_completed_note, owner_user_id, sales_person, battery_solution, vehicle_brand, vehicle_model, how_we_win, opportunity_for_bnt, bnt_categories, bnt_invite, opportunity_for_penz, penz_categories, penz_invite, opportunity_for_bapcor_rebate, bapcor_rebate_invite, notes";
 
         const runQuery = (select: string) =>
           supabase.from("opportunities").select(select).limit(MAX_OPPORTUNITIES);
 
-        let { data, error } = await runQuery(baseSelect);
+        const REQUIRED_COLS = [
+          "id",
+          "account_id",
+          "branch_id",
+          "stage",
+          "close_date",
+          "rolling_12m_value",
+          "probability",
+          "next_action",
+          "next_action_due",
+        ] as const;
 
-        if (error && /next_action_completed_by/i.test(error.message) && /does not exist/i.test(error.message)) {
-          const fallbackSelect = baseSelect.replace(", next_action_completed_by", "");
-          const retry = await runQuery(fallbackSelect);
-          data = retry.data;
-          error = retry.error;
-        }
+        const requiredSet = new Set<string>(REQUIRED_COLS.map((c) => c.toLowerCase()));
 
-        if (error && /owner_user_id/i.test(error.message) && /does not exist/i.test(error.message)) {
-          const fallbackSelect = baseSelect.replace(", owner_user_id", "");
-          const retry = await runQuery(fallbackSelect);
-          data = retry.data;
-          error = retry.error;
-        }
+        const removeCol = (select: string, col: string) => {
+          // Remove either `, col` or `col,` (start) safely.
+          let next = select;
+          next = next.replace(new RegExp(`,\\s*${col}\\b`, "i"), "");
+          next = next.replace(new RegExp(`^\\s*${col}\\b\\s*,\\s*`, "i"), "");
+          return next;
+        };
 
-        if (error && /sales_person/i.test(error.message) && /does not exist/i.test(error.message)) {
-          const fallbackSelect = baseSelect.replace(", sales_person", "");
-          const retry = await runQuery(fallbackSelect);
-          data = retry.data;
-          error = retry.error;
+        const extractMissingColumn = (message: string) => {
+          // Examples we see:
+          // - column opportunities.how_we_win does not exist
+          // - column "how_we_win" does not exist
+          // - Could not find the 'how_we_win' column of 'opportunities' in the schema cache
+          const m1 = message.match(/column\s+([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)\s+does\s+not\s+exist/i);
+          if (m1?.[2]) return m1[2];
+
+          const m2 = message.match(/column\s+"?([a-zA-Z0-9_]+)"?\s+does\s+not\s+exist/i);
+          if (m2?.[1]) return m2[1];
+
+          const m3 = message.match(/Could\s+not\s+find\s+the\s+'([a-zA-Z0-9_]+)'\s+column\s+of\s+'[a-zA-Z0-9_]+'\s+in\s+the\s+schema\s+cache/i);
+          if (m3?.[1]) return m3[1];
+
+          return null;
+        };
+
+        let select = baseSelect;
+        let data: unknown = null;
+        let error: { message: string } | null = null;
+
+        // Retry a handful of times by removing optional columns on demand.
+        for (let attempt = 0; attempt < 20; attempt++) {
+          const res = await runQuery(select);
+          data = res.data;
+          error = res.error as unknown as { message: string } | null;
+
+          if (!error) break;
+
+          const msg = error.message ?? "";
+          if ((/does not exist/i.test(msg) && /column/i.test(msg)) || /schema cache/i.test(msg)) {
+            const col = extractMissingColumn(msg);
+            if (col && !requiredSet.has(col.toLowerCase())) {
+              const before = select;
+              select = removeCol(select, col);
+              if (select !== before) continue;
+            }
+          }
+
+          // Not a missing-column case we can safely degrade from; surface the error.
+          throw new Error(msg || "Failed to fetch opportunities");
         }
 
         if (error) throw new Error(error.message || "Failed to fetch opportunities");
@@ -706,6 +770,8 @@ export default function PipelinePage() {
     setCreateOpportunityForPenz("");
     setCreatePenzCategories([]);
     setCreatePenzInvite("");
+    setCreateOpportunityForBapcorRebate("");
+    setCreateBapcorRebateInvite("");
     setCreateNotes("");
   }
 
@@ -769,6 +835,14 @@ export default function PipelinePage() {
           : {}),
         ...(createOpportunityForPenz.trim().toLowerCase() === "yes" && createPenzInvite.trim()
           ? { penz_invite: createPenzInvite.trim() }
+          : {}),
+        ...(createOpportunityForBapcorRebate.trim()
+          ? { opportunity_for_bapcor_rebate: createOpportunityForBapcorRebate.trim() }
+          : {}),
+        ...((createOpportunityForBapcorRebate.trim().toLowerCase() === "yes" ||
+          createOpportunityForBapcorRebate.trim().toLowerCase() === "unsure") &&
+        createBapcorRebateInvite.trim()
+          ? { bapcor_rebate_invite: createBapcorRebateInvite.trim() }
           : {}),
         notes: createNotes.trim() || null,
       } as Record<string, unknown>;
@@ -837,6 +911,16 @@ export default function PipelinePage() {
             "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite."
           );
         }
+        if (/opportunity_for_bapcor_rebate/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Bapcor Rebate opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bapcor_rebate."
+          );
+        }
+        if (/bapcor_rebate_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Bapcor Rebate invite field isn't in your database yet. Add a nullable text column on opportunities: bapcor_rebate_invite."
+          );
+        }
           throw new Error(error.message || msg);
         }
       }
@@ -877,6 +961,8 @@ export default function PipelinePage() {
     setEditOpportunityForPenz(String(row.opportunity_for_penz ?? ""));
     setEditPenzCategories(parseMultiValue(row.penz_categories));
     setEditPenzInvite(String(row.penz_invite ?? ""));
+    setEditOpportunityForBapcorRebate(String(row.opportunity_for_bapcor_rebate ?? ""));
+    setEditBapcorRebateInvite(String(row.bapcor_rebate_invite ?? ""));
     setEditNotes(row.notes ?? "");
     setEditOpen(true);
   }
@@ -1079,6 +1165,12 @@ export default function PipelinePage() {
             : null,
         penz_invite:
           editOpportunityForPenz.trim().toLowerCase() === "yes" ? editPenzInvite.trim() || null : null,
+        opportunity_for_bapcor_rebate: editOpportunityForBapcorRebate.trim() || null,
+        bapcor_rebate_invite:
+          editOpportunityForBapcorRebate.trim().toLowerCase() === "yes" ||
+          editOpportunityForBapcorRebate.trim().toLowerCase() === "unsure"
+            ? editBapcorRebateInvite.trim() || null
+            : null,
         ...(editBatterySolution.trim() === "Commercial Vehicles and Fleets"
           ? {}
           : {
@@ -1140,6 +1232,17 @@ export default function PipelinePage() {
         if (/penz_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
             "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite."
+          );
+        }
+
+        if (/opportunity_for_bapcor_rebate/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Bapcor Rebate opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bapcor_rebate."
+          );
+        }
+        if (/bapcor_rebate_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Bapcor Rebate invite field isn't in your database yet. Add a nullable text column on opportunities: bapcor_rebate_invite."
           );
         }
 
@@ -2169,7 +2272,7 @@ export default function PipelinePage() {
 
             <div className="md:col-span-2">
               <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">How we win?</label>
-              <details className="mt-1 relative">
+              <details ref={createHowWeWinDetailsRef} className="mt-1 relative">
                 <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
                   {createHowWeWin.length ? createHowWeWin.join(", ") : "Select one or more…"}
                 </summary>
@@ -2185,6 +2288,18 @@ export default function PipelinePage() {
                         <span>{opt}</span>
                       </label>
                     ))}
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        createHowWeWinDetailsRef.current?.removeAttribute("open");
+                      }}
+                      className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                    >
+                      Done
+                    </button>
                   </div>
                 </div>
               </details>
@@ -2214,7 +2329,7 @@ export default function PipelinePage() {
               <>
                 <div className="md:col-span-2">
                   <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">BNT categories</label>
-                  <details className="mt-1 relative">
+                  <details ref={createBntCategoriesDetailsRef} className="mt-1 relative">
                     <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
                       {createBntCategories.length ? createBntCategories.join(", ") : "Select one or more…"}
                     </summary>
@@ -2240,6 +2355,18 @@ export default function PipelinePage() {
                           </label>
                         ))}
                       </div>
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              createBntCategoriesDetailsRef.current?.removeAttribute("open");
+                            }}
+                            className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                          >
+                            Done
+                          </button>
+                        </div>
                     </div>
                   </details>
                 </div>
@@ -2280,7 +2407,7 @@ export default function PipelinePage() {
               <>
                 <div className="md:col-span-2">
                   <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">PENZ categories</label>
-                  <details className="mt-1 relative">
+                  <details ref={createPenzCategoriesDetailsRef} className="mt-1 relative">
                     <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
                       {createPenzCategories.length ? createPenzCategories.join(", ") : "Select one or more…"}
                     </summary>
@@ -2306,6 +2433,18 @@ export default function PipelinePage() {
                           </label>
                         ))}
                       </div>
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              createPenzCategoriesDetailsRef.current?.removeAttribute("open");
+                            }}
+                            className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                          >
+                            Done
+                          </button>
+                        </div>
                     </div>
                   </details>
                 </div>
@@ -2321,6 +2460,75 @@ export default function PipelinePage() {
                 </div>
               </>
             )}
+
+            <div className="md:col-span-2">
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Opportunity for Bapcor Rebate?
+              </label>
+              <details ref={createBapcorRebateDetailsRef} className="mt-1 relative">
+                <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
+                  {createOpportunityForBapcorRebate.trim()
+                    ? createOpportunityForBapcorRebate.trim()
+                    : "Select Yes / No / Unsure…"}
+                  {createOpportunityForBapcorRebate.trim() && createBapcorRebateInvite.trim()
+                    ? ` — bring in: ${createBapcorRebateInvite.trim()}`
+                    : ""}
+                </summary>
+                <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
+                  <div className="grid gap-2">
+                    {(["Yes", "No", "Unsure"] as const).map((opt) => (
+                      <label
+                        key={opt}
+                        className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={createOpportunityForBapcorRebate.trim() === opt}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            const next = checked ? opt : "";
+                            setCreateOpportunityForBapcorRebate(next);
+                            if (next.trim().toLowerCase() === "no" || !next.trim()) {
+                              setCreateBapcorRebateInvite("");
+                            }
+                          }}
+                        />
+                        <span>{opt.toUpperCase()}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="mt-3">
+                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      Who to bring in?
+                    </label>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                      value={createBapcorRebateInvite}
+                      onChange={(e) => setCreateBapcorRebateInvite(e.target.value)}
+                      placeholder="Name(s)…"
+                      disabled={!['yes', 'unsure'].includes(createOpportunityForBapcorRebate.trim().toLowerCase())}
+                    />
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                      Optional (enabled for YES/UNSURE).
+                    </p>
+                  </div>
+
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        createBapcorRebateDetailsRef.current?.removeAttribute("open");
+                      }}
+                      className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              </details>
+            </div>
 
             <div>
               <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Stage</label>
@@ -2741,7 +2949,7 @@ export default function PipelinePage() {
 
               <div className="md:col-span-2">
                 <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">How we win?</label>
-                <details className="mt-1 relative">
+                <details ref={editHowWeWinDetailsRef} className="mt-1 relative">
                   <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
                     {editHowWeWin.length ? editHowWeWin.join(", ") : "Select one or more…"}
                   </summary>
@@ -2757,6 +2965,18 @@ export default function PipelinePage() {
                           <span>{opt}</span>
                         </label>
                       ))}
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          editHowWeWinDetailsRef.current?.removeAttribute("open");
+                        }}
+                        className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                      >
+                        Done
+                      </button>
                     </div>
                   </div>
                 </details>
@@ -2786,7 +3006,7 @@ export default function PipelinePage() {
                 <>
                   <div className="md:col-span-2">
                     <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">BNT categories</label>
-                    <details className="mt-1 relative">
+                    <details ref={editBntCategoriesDetailsRef} className="mt-1 relative">
                       <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
                         {editBntCategories.length ? editBntCategories.join(", ") : "Select one or more…"}
                       </summary>
@@ -2811,6 +3031,18 @@ export default function PipelinePage() {
                               <span>{opt}</span>
                             </label>
                           ))}
+                        </div>
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              editBntCategoriesDetailsRef.current?.removeAttribute("open");
+                            }}
+                            className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                          >
+                            Done
+                          </button>
                         </div>
                       </div>
                     </details>
@@ -2852,7 +3084,7 @@ export default function PipelinePage() {
                 <>
                   <div className="md:col-span-2">
                     <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">PENZ categories</label>
-                    <details className="mt-1 relative">
+                    <details ref={editPenzCategoriesDetailsRef} className="mt-1 relative">
                       <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
                         {editPenzCategories.length ? editPenzCategories.join(", ") : "Select one or more…"}
                       </summary>
@@ -2878,6 +3110,18 @@ export default function PipelinePage() {
                             </label>
                           ))}
                         </div>
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              editPenzCategoriesDetailsRef.current?.removeAttribute("open");
+                            }}
+                            className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                          >
+                            Done
+                          </button>
+                        </div>
                       </div>
                     </details>
                   </div>
@@ -2893,6 +3137,75 @@ export default function PipelinePage() {
                   </div>
                 </>
               )}
+
+              <div className="md:col-span-2">
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Opportunity for Bapcor Rebate?
+                </label>
+                <details ref={editBapcorRebateDetailsRef} className="mt-1 relative">
+                  <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
+                    {editOpportunityForBapcorRebate.trim()
+                      ? editOpportunityForBapcorRebate.trim()
+                      : "Select Yes / No / Unsure…"}
+                    {editOpportunityForBapcorRebate.trim() && editBapcorRebateInvite.trim()
+                      ? ` — bring in: ${editBapcorRebateInvite.trim()}`
+                      : ""}
+                  </summary>
+                  <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
+                    <div className="grid gap-2">
+                      {(["Yes", "No", "Unsure"] as const).map((opt) => (
+                        <label
+                          key={opt}
+                          className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={editOpportunityForBapcorRebate.trim() === opt}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              const next = checked ? opt : "";
+                              setEditOpportunityForBapcorRebate(next);
+                              if (next.trim().toLowerCase() === "no" || !next.trim()) {
+                                setEditBapcorRebateInvite("");
+                              }
+                            }}
+                          />
+                          <span>{opt.toUpperCase()}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="mt-3">
+                      <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        Who to bring in?
+                      </label>
+                      <input
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                        value={editBapcorRebateInvite}
+                        onChange={(e) => setEditBapcorRebateInvite(e.target.value)}
+                        placeholder="Name(s)…"
+                        disabled={!['yes', 'unsure'].includes(editOpportunityForBapcorRebate.trim().toLowerCase())}
+                      />
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                        Optional (enabled for YES/UNSURE).
+                      </p>
+                    </div>
+
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          editBapcorRebateDetailsRef.current?.removeAttribute("open");
+                        }}
+                        className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </details>
+              </div>
 
               <div>
                 <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Stage</label>
