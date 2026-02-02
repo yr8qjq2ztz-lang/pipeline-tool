@@ -1216,7 +1216,14 @@ export default function PipelinePage() {
         : updateBase;
 
       let payload = updateWithOwner as Record<string, unknown>;
-      let { error } = await supabase.from("opportunities").update(payload).eq("id", editId);
+      const runUpdate = async (nextPayload: Record<string, unknown>) => {
+        return supabase.from("opportunities").update(nextPayload).eq("id", editId).select("id");
+      };
+
+      let updatedRows: Array<{ id: string }> | null = null;
+      const firstUpdate = await runUpdate(payload);
+      let error = firstUpdate.error;
+      updatedRows = (firstUpdate.data as Array<{ id: string }> | null) ?? null;
 
       if (error) {
         let msg = error.message || "Failed to update opportunity";
@@ -1237,8 +1244,9 @@ export default function PipelinePage() {
         if (missingBatterySolution) {
           const retryUpdate = { ...payload };
           delete retryUpdate.battery_solution;
-          const retry = await supabase.from("opportunities").update(retryUpdate).eq("id", editId);
+          const retry = await runUpdate(retryUpdate);
           error = retry.error;
+          updatedRows = (retry.data as Array<{ id: string }> | null) ?? null;
           msg = error?.message || msg;
           payload = retryUpdate;
         }
@@ -1295,8 +1303,9 @@ export default function PipelinePage() {
           // Retry the update without referencing the missing column.
           const retryUpdate = { ...payload };
           delete retryUpdate.next_action_completed_at;
-          const retry = await supabase.from("opportunities").update(retryUpdate).eq("id", editId);
+          const retry = await runUpdate(retryUpdate);
           error = retry.error;
+          updatedRows = (retry.data as Array<{ id: string }> | null) ?? null;
           msg = error?.message || msg;
           payload = retryUpdate;
         }
@@ -1306,8 +1315,9 @@ export default function PipelinePage() {
         if (missingBapcorInvite) {
           const retryUpdate = { ...payload };
           delete retryUpdate.bapcor_rebate_invite;
-          const retry = await supabase.from("opportunities").update(retryUpdate).eq("id", editId);
+          const retry = await runUpdate(retryUpdate);
           error = retry.error;
+          updatedRows = (retry.data as Array<{ id: string }> | null) ?? null;
           msg = error?.message || msg;
           payload = retryUpdate;
         }
@@ -1315,8 +1325,9 @@ export default function PipelinePage() {
         const missingOwner = /owner_user_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
         if (missingOwner && ownerFieldAvailable) {
           payload = updateBase as Record<string, unknown>;
-          const retry = await supabase.from("opportunities").update(payload).eq("id", editId);
+          const retry = await runUpdate(payload);
           error = retry.error;
+          updatedRows = (retry.data as Array<{ id: string }> | null) ?? null;
           msg = error?.message || msg;
         }
 
@@ -1327,6 +1338,13 @@ export default function PipelinePage() {
         }
 
         if (error) throw new Error(error.message || msg);
+      }
+
+      // PostgREST can return 200/204 with no error but 0 rows updated if RLS blocks updates.
+      if (!error && (!updatedRows || updatedRows.length === 0)) {
+        throw new Error(
+          "No rows were updated. This usually means your Supabase RLS policies allow reading opportunities but not updating them. Add an UPDATE policy for authenticated users on public.opportunities."
+        );
       }
 
       await fetchOpportunities();
@@ -1356,14 +1374,23 @@ export default function PipelinePage() {
         prev.map((r) => (r.id === id ? { ...r, stage: newStage } : r))
       );
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("opportunities")
         .update({ stage: newStage })
-        .eq("id", id);
+        .eq("id", id)
+        .select("id");
 
       if (error) {
         console.error("Stage update error:", error);
         throw new Error(error.message || "Failed to update stage");
+      }
+
+      // If RLS blocks updates, PostgREST may return no error but also no updated rows.
+      // Supabase returns an empty array in that case when using return=representation.
+      if (!data || data.length === 0) {
+        throw new Error(
+          "Stage didn't save (0 rows updated). This usually means your Supabase RLS UPDATE policy is missing/too strict for opportunities."
+        );
       }
     } catch (e: unknown) {
       console.error("Stage update failed:", e);
