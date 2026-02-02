@@ -30,7 +30,9 @@ function isMissingColumnError(message: string | null | undefined, column: string
   // Common PostgREST/Postgres variants:
   // - column opportunities.next_action_completed_at does not exist
   // - column "next_action_completed_at" does not exist
-  return msg.includes("does not exist") && msg.includes("column") && msg.includes(col);
+  const postgresDoesNotExist = msg.includes("does not exist") && msg.includes("column") && msg.includes(col);
+  const postgrestSchemaCache = msg.includes("could not find") && msg.includes("schema cache") && msg.includes(col);
+  return postgresDoesNotExist || postgrestSchemaCache;
 }
 
 function isMissingTableError(message: string | null | undefined, table: string) {
@@ -115,8 +117,6 @@ export default async function AdminSchemaPage() {
   const optionalCols: Array<{ col: string; label: string; script: string }> = [
     { col: "sales_person", label: "Sales person column", script: "SUPABASE_SQL_sales_person.sql" },
     { col: "battery_solution", label: "Battery solution column", script: "SUPABASE_SQL_battery_solution.sql" },
-    { col: "vehicle_brand", label: "Vehicle brand column", script: "SUPABASE_SQL_vehicle_fields.sql" },
-    { col: "vehicle_model", label: "Vehicle model column", script: "SUPABASE_SQL_vehicle_fields.sql" },
     {
       col: "next_action_completed_at",
       label: "Next action completion tracking",
