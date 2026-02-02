@@ -17,13 +17,13 @@ alter table public.opportunities enable row level security;
 -- OPTION A (simplest): any authenticated user can UPDATE any opportunity row.
 -- Use this if you don't have owner-based permissions yet.
 -- -----------------------------------------------------------------------------
--- drop policy if exists opportunities_update_authenticated_all on public.opportunities;
--- create policy opportunities_update_authenticated_all
--- on public.opportunities
--- for update
--- to authenticated
--- using (true)
--- with check (true);
+drop policy if exists opportunities_update_authenticated_all on public.opportunities;
+create policy opportunities_update_authenticated_all
+on public.opportunities
+for update
+to authenticated
+using (true)
+with check (true);
 
 -- -----------------------------------------------------------------------------
 -- OPTION B (recommended when you have ownership):
