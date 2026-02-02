@@ -219,7 +219,7 @@ export default function PipelinePage() {
   const [createNextAction, setCreateNextAction] = useState<string>("");
   const [createNextActionDue, setCreateNextActionDue] = useState<string>("");
   const [createSalesPerson, setCreateSalesPerson] = useState<string>("");
-  const [createBatterySolution, setCreateBatterySolution] = useState<string>("");
+  const [createBatterySolutions, setCreateBatterySolutions] = useState<string[]>([]);
   const [createHowWeWin, setCreateHowWeWin] = useState<string[]>([]);
   const [createOpportunityForBnt, setCreateOpportunityForBnt] = useState<string>("");
   const [createBntCategories, setCreateBntCategories] = useState<string[]>([]);
@@ -252,7 +252,7 @@ export default function PipelinePage() {
   const [editOriginalNextActionDue, setEditOriginalNextActionDue] = useState<string>("");
   const [editOwnerUserId, setEditOwnerUserId] = useState<string>("");
   const [editSalesPerson, setEditSalesPerson] = useState<string>("");
-  const [editBatterySolution, setEditBatterySolution] = useState<string>("");
+  const [editBatterySolutions, setEditBatterySolutions] = useState<string[]>([]);
   const [editHowWeWin, setEditHowWeWin] = useState<string[]>([]);
   const [editOpportunityForBnt, setEditOpportunityForBnt] = useState<string>("");
   const [editBntCategories, setEditBntCategories] = useState<string[]>([]);
@@ -773,7 +773,7 @@ export default function PipelinePage() {
     setCreateNextAction("");
     setCreateNextActionDue("");
     setCreateSalesPerson("");
-    setCreateBatterySolution("");
+    setCreateBatterySolutions([]);
     setCreateHowWeWin([]);
     setCreateOpportunityForBnt("");
     setCreateBntCategories([]);
@@ -831,7 +831,7 @@ export default function PipelinePage() {
         next_action_due: createNextActionDue || null,
         next_action_completed_at: null,
         ...(createSalesPerson.trim() ? { sales_person: createSalesPerson.trim() } : {}),
-        ...(createBatterySolution.trim() ? { battery_solution: createBatterySolution.trim() } : {}),
+        ...(createBatterySolutions.length ? { battery_solution: createBatterySolutions.join(", ") } : {}),
         ...(createHowWeWin.length ? { how_we_win: createHowWeWin.join(", ") } : {}),
         ...(createOpportunityForBnt.trim() ? { opportunity_for_bnt: createOpportunityForBnt.trim() } : {}),
         ...(createOpportunityForBnt.trim().toLowerCase() === "yes" && createBntCategories.length
@@ -861,7 +861,9 @@ export default function PipelinePage() {
       const insertWithOwner =
         currentUserId ? { ...insertBase, owner_user_id: currentUserId } : insertBase;
 
-      let { error } = await supabase.from("opportunities").insert(insertWithOwner);
+      let payload = insertWithOwner as Record<string, unknown>;
+
+      let { error } = await supabase.from("opportunities").insert(payload);
 
       if (error) {
         let msg = error.message || "Failed to create opportunity";
@@ -869,20 +871,32 @@ export default function PipelinePage() {
         const missingOwner = /owner_user_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
         if (missingOwner && currentUserId) {
           console.warn("owner_user_id column missing; creating opportunity without owner assignment.");
-          const retry = await supabase.from("opportunities").insert(insertBase);
+          payload = insertBase as Record<string, unknown>;
+          const retry = await supabase.from("opportunities").insert(payload);
           error = retry.error;
           msg = error?.message || msg;
         }
 
         const missingBapcorInvite =
           /bapcor_rebate_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
-        if (missingBapcorInvite) {
+        if (missingBapcorInvite && error) {
           console.warn(
             "bapcor_rebate_invite column missing; creating opportunity without rebate invite who-to-bring-in."
           );
-          const retryPayload = { ...(insertWithOwner as Record<string, unknown>) };
-          delete retryPayload.bapcor_rebate_invite;
-          const retry = await supabase.from("opportunities").insert(retryPayload);
+          payload = { ...payload };
+          delete payload.bapcor_rebate_invite;
+          const retry = await supabase.from("opportunities").insert(payload);
+          error = retry.error;
+          msg = error?.message || msg;
+        }
+
+        const missingBatterySolution =
+          /battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
+        if (missingBatterySolution && error) {
+          console.warn("battery_solution column missing; creating opportunity without Battery Solution.");
+          payload = { ...payload };
+          delete payload.battery_solution;
+          const retry = await supabase.from("opportunities").insert(payload);
           error = retry.error;
           msg = error?.message || msg;
         }
@@ -897,7 +911,7 @@ export default function PipelinePage() {
         }
         if (/battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution."
+            "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution (or run SUPABASE_SQL_battery_solution.sql)."
           );
         }
         if (/how_we_win/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
@@ -977,7 +991,7 @@ export default function PipelinePage() {
     setEditOriginalNextActionDue(row.next_action_due ?? "");
     setEditOwnerUserId(String(row.owner_user_id ?? ""));
     setEditSalesPerson(String(row.sales_person ?? ""));
-    setEditBatterySolution(String(row.battery_solution ?? ""));
+    setEditBatterySolutions(parseMultiValue(row.battery_solution));
     setEditHowWeWin(parseMultiValue(row.how_we_win));
     setEditOpportunityForBnt(String(row.opportunity_for_bnt ?? ""));
     setEditBntCategories(parseMultiValue(row.bnt_categories));
@@ -1167,9 +1181,7 @@ export default function PipelinePage() {
         next_action_due: nextActionDue,
         next_action_completed_at: nextActionCompletedAt,
         ...(editSalesPerson.trim() ? { sales_person: editSalesPerson.trim() } : { sales_person: null }),
-        ...(editBatterySolution.trim()
-          ? { battery_solution: editBatterySolution.trim() }
-          : { battery_solution: null }),
+        battery_solution: editBatterySolutions.length ? editBatterySolutions.join(", ") : null,
         how_we_win: editHowWeWin.length ? editHowWeWin.join(", ") : null,
         opportunity_for_bnt: editOpportunityForBnt.trim() || null,
         bnt_categories:
@@ -1195,7 +1207,7 @@ export default function PipelinePage() {
           editOpportunityForBapcorRebate.trim().toLowerCase() === "unsure"
             ? editBapcorRebateInvite.trim() || null
             : null,
-        ...(editBatterySolution.trim() === "Commercial Vehicles and Fleets"
+        ...(editBatterySolutions.includes("Commercial Vehicles and Fleets")
           ? {}
           : {
               vehicle_brand: null,
@@ -1208,7 +1220,8 @@ export default function PipelinePage() {
         ? { ...updateBase, owner_user_id: editOwnerUserId.trim() || null }
         : updateBase;
 
-      let { error } = await supabase.from("opportunities").update(updateWithOwner).eq("id", editId);
+      let payload = updateWithOwner as Record<string, unknown>;
+      let { error } = await supabase.from("opportunities").update(payload).eq("id", editId);
 
       if (error) {
         let msg = error.message || "Failed to update opportunity";
@@ -1217,10 +1230,16 @@ export default function PipelinePage() {
             "Sales person field isn't in your database yet. Add a nullable text column on opportunities: sales_person."
           );
         }
-        if (/battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
-          throw new Error(
-            "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution."
-          );
+
+        const missingBatterySolution =
+          /battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
+        if (missingBatterySolution) {
+          const retryUpdate = { ...payload };
+          delete retryUpdate.battery_solution;
+          const retry = await supabase.from("opportunities").update(retryUpdate).eq("id", editId);
+          error = retry.error;
+          msg = error?.message || msg;
+          payload = retryUpdate;
         }
 
         if (/how_we_win/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
@@ -1273,28 +1292,37 @@ export default function PipelinePage() {
         if (/next_action_completed_at/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           // Completion tracking is optional (see SUPABASE_SCHEMA_CHECKLIST.md).
           // Retry the update without referencing the missing column.
-          const retryUpdate = { ...(updateWithOwner as Record<string, unknown>) };
+          const retryUpdate = { ...payload };
           delete retryUpdate.next_action_completed_at;
           const retry = await supabase.from("opportunities").update(retryUpdate).eq("id", editId);
           error = retry.error;
           msg = error?.message || msg;
+          payload = retryUpdate;
         }
 
         const missingBapcorInvite =
           /bapcor_rebate_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
         if (missingBapcorInvite) {
-          const retryUpdate = { ...(updateWithOwner as Record<string, unknown>) };
+          const retryUpdate = { ...payload };
           delete retryUpdate.bapcor_rebate_invite;
           const retry = await supabase.from("opportunities").update(retryUpdate).eq("id", editId);
           error = retry.error;
           msg = error?.message || msg;
+          payload = retryUpdate;
         }
 
         const missingOwner = /owner_user_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
         if (missingOwner && ownerFieldAvailable) {
-          const retry = await supabase.from("opportunities").update(updateBase).eq("id", editId);
+          payload = updateBase as Record<string, unknown>;
+          const retry = await supabase.from("opportunities").update(payload).eq("id", editId);
           error = retry.error;
           msg = error?.message || msg;
+        }
+
+        if (/battery_solution/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
+          throw new Error(
+            "Battery Solution field isn't in your database yet. Add a nullable text column on opportunities: battery_solution (or run SUPABASE_SQL_battery_solution.sql)."
+          );
         }
 
         if (error) throw new Error(error.message || msg);
@@ -2291,16 +2319,16 @@ export default function PipelinePage() {
               <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Battery Solution</label>
               <details ref={createBatterySolutionDetailsRef} className="mt-1 relative">
                 <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
-                  {createBatterySolution.trim() ? createBatterySolution.trim() : "(optional)"}
+                  {createBatterySolutions.length ? createBatterySolutions.join(", ") : "(optional)"}
                 </summary>
                 <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
                   <div className="grid gap-2">
                     <label className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
                       <input
                         type="checkbox"
-                        checked={!createBatterySolution.trim()}
+                        checked={!createBatterySolutions.length}
                         onChange={(e) => {
-                          if (e.target.checked) setCreateBatterySolution("");
+                          if (e.target.checked) setCreateBatterySolutions([]);
                         }}
                       />
                       <span>(optional / none)</span>
@@ -2310,11 +2338,8 @@ export default function PipelinePage() {
                       <label key={s} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
                         <input
                           type="checkbox"
-                          checked={createBatterySolution.trim() === s}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setCreateBatterySolution(checked ? s : "");
-                          }}
+                          checked={createBatterySolutions.includes(s)}
+                          onChange={() => toggleMultiSelect(setCreateBatterySolutions, s)}
                         />
                         <span>{s}</span>
                       </label>
@@ -2626,14 +2651,19 @@ export default function PipelinePage() {
 
             <div>
               <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Rolling 12 MTH value</label>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
-                type="number"
-                min={0}
-                step="0.01"
-                value={createRolling12mValue}
-                onChange={(e) => setCreateRolling12mValue(e.target.value)}
-              />
+              <div className="mt-1 relative">
+                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-slate-500 dark:text-slate-400">
+                  $
+                </span>
+                <input
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 pl-7 pr-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={createRolling12mValue}
+                  onChange={(e) => setCreateRolling12mValue(e.target.value)}
+                />
+              </div>
             </div>
 
             <div>
@@ -3001,16 +3031,16 @@ export default function PipelinePage() {
                 <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Battery Solution</label>
                 <details ref={editBatterySolutionDetailsRef} className="mt-1 relative">
                   <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
-                    {editBatterySolution.trim() ? editBatterySolution.trim() : "(optional)"}
+                    {editBatterySolutions.length ? editBatterySolutions.join(", ") : "(optional)"}
                   </summary>
                   <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
                     <div className="grid gap-2">
                       <label className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
                         <input
                           type="checkbox"
-                          checked={!editBatterySolution.trim()}
+                          checked={!editBatterySolutions.length}
                           onChange={(e) => {
-                            if (e.target.checked) setEditBatterySolution("");
+                            if (e.target.checked) setEditBatterySolutions([]);
                           }}
                         />
                         <span>(optional / none)</span>
@@ -3020,11 +3050,8 @@ export default function PipelinePage() {
                         <label key={s} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
                           <input
                             type="checkbox"
-                            checked={editBatterySolution.trim() === s}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              setEditBatterySolution(checked ? s : "");
-                            }}
+                            checked={editBatterySolutions.includes(s)}
+                            onChange={() => toggleMultiSelect(setEditBatterySolutions, s)}
                           />
                           <span>{s}</span>
                         </label>
@@ -3336,14 +3363,19 @@ export default function PipelinePage() {
 
               <div>
                 <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Rolling 12 MTH value</label>
-                <input
-                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={editRolling12mValue}
-                  onChange={(e) => setEditRolling12mValue(e.target.value)}
-                />
+                <div className="mt-1 relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-slate-500 dark:text-slate-400">
+                    $
+                  </span>
+                  <input
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 pl-7 pr-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={editRolling12mValue}
+                    onChange={(e) => setEditRolling12mValue(e.target.value)}
+                  />
+                </div>
               </div>
 
               <div>
