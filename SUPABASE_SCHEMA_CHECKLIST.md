@@ -8,6 +8,10 @@ Run these in the Supabase **SQL Editor** (in any order). Each script is idempote
 
 ## Optional feature columns
 
+- BNT + PENZ (recommended one-shot)
+  - Script: `SUPABASE_SQL_bnt_penz.sql`
+  - Adds: `opportunities.opportunity_for_bnt`, `opportunities.bnt_categories`, `opportunities.bnt_invite`, `opportunities.opportunity_for_penz`, `opportunities.penz_categories`, `opportunities.penz_invite` (text)
+
 - Sales person
   - Script: `SUPABASE_SQL_sales_person.sql`
   - Adds: `opportunities.sales_person` (text)
@@ -27,6 +31,18 @@ Run these in the Supabase **SQL Editor** (in any order). Each script is idempote
 - BNT invite
   - Script: `SUPABASE_SQL_bnt_invite.sql`
   - Adds: `opportunities.bnt_invite` (text)
+
+- PENZ opportunity
+  - Script: `SUPABASE_SQL_bnt_penz.sql`
+  - Adds: `opportunities.opportunity_for_penz` (text)
+
+- PENZ categories
+  - Script: `SUPABASE_SQL_bnt_penz.sql`
+  - Adds: `opportunities.penz_categories` (text)
+
+- PENZ invite
+  - Script: `SUPABASE_SQL_bnt_penz.sql`
+  - Adds: `opportunities.penz_invite` (text)
 
 - How we win
   - Script: `SUPABASE_SQL_how_we_win.sql`

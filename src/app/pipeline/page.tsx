@@ -921,32 +921,32 @@ export default function PipelinePage() {
         }
         if (/opportunity_for_bnt/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bnt."
+            "BNT opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bnt (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/bnt_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT categories field isn't in your database yet. Add a nullable text column on opportunities: bnt_categories."
+            "BNT categories field isn't in your database yet. Add a nullable text column on opportunities: bnt_categories (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/bnt_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT invite field isn't in your database yet. Add a nullable text column on opportunities: bnt_invite."
+            "BNT invite field isn't in your database yet. Add a nullable text column on opportunities: bnt_invite (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/opportunity_for_penz/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_penz."
+            "PENZ opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_penz (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/penz_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ categories field isn't in your database yet. Add a nullable text column on opportunities: penz_categories."
+            "PENZ categories field isn't in your database yet. Add a nullable text column on opportunities: penz_categories (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/penz_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite."
+            "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/opportunity_for_bapcor_rebate/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
@@ -1249,32 +1249,32 @@ export default function PipelinePage() {
         }
         if (/opportunity_for_bnt/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bnt."
+            "BNT opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_bnt (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/bnt_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT categories field isn't in your database yet. Add a nullable text column on opportunities: bnt_categories."
+            "BNT categories field isn't in your database yet. Add a nullable text column on opportunities: bnt_categories (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/bnt_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "BNT invite field isn't in your database yet. Add a nullable text column on opportunities: bnt_invite."
+            "BNT invite field isn't in your database yet. Add a nullable text column on opportunities: bnt_invite (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/opportunity_for_penz/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_penz."
+            "PENZ opportunity field isn't in your database yet. Add a nullable text column on opportunities: opportunity_for_penz (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/penz_categories/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ categories field isn't in your database yet. Add a nullable text column on opportunities: penz_categories."
+            "PENZ categories field isn't in your database yet. Add a nullable text column on opportunities: penz_categories (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
         if (/penz_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite."
+            "PENZ invite field isn't in your database yet. Add a nullable text column on opportunities: penz_invite (or run SUPABASE_SQL_bnt_penz.sql)."
           );
         }
 
