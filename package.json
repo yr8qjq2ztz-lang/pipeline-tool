@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "analyze": "cross-env ANALYZE=true next build --webpack",
+    "dev": "node scripts/next.mjs dev",
+    "build": "node scripts/next.mjs build",
+    "start": "node scripts/next.mjs start",
+    "analyze": "cross-env ANALYZE=true node scripts/next.mjs build --webpack",
     "smoke": "npm run build && node scripts/smoke.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"

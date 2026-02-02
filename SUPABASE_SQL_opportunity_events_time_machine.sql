@@ -34,6 +34,7 @@ create index if not exists opportunity_events_opportunity_id_created_at_idx
 create or replace function public.log_opportunity_event()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   if (tg_op = 'INSERT') then

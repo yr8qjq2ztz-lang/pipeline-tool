@@ -5,6 +5,12 @@ export async function proxy(request: NextRequest) {
   // Always start with a pass-through response we can attach cookies to
   const response = NextResponse.next();
 
+  // If Supabase needs to refresh the session, it will call `setAll`.
+  // We must apply those cookies to *whatever* response we return (including redirects).
+  type CookieOptions = Parameters<NextResponse["cookies"]["set"]>[2];
+  type CookieToSet = { name: string; value: string; options?: CookieOptions };
+  const pendingCookies: CookieToSet[] = [];
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -17,7 +23,9 @@ export async function proxy(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
+        pendingCookies.length = 0;
+        (cookiesToSet as CookieToSet[]).forEach(({ name, value, options }) => {
+          pendingCookies.push({ name, value, options });
           response.cookies.set(name, value, options);
         });
       },
@@ -43,7 +51,11 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirectedFrom", pathname);
-    return NextResponse.redirect(url);
+    const redirectRes = NextResponse.redirect(url);
+    pendingCookies.forEach(({ name, value, options }) => {
+      redirectRes.cookies.set(name, value, options);
+    });
+    return redirectRes;
   }
 
   // Logged in + trying to access login -> go to pipeline
@@ -51,7 +63,11 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/pipeline";
     url.search = "";
-    return NextResponse.redirect(url);
+    const redirectRes = NextResponse.redirect(url);
+    pendingCookies.forEach(({ name, value, options }) => {
+      redirectRes.cookies.set(name, value, options);
+    });
+    return redirectRes;
   }
 
   return response;
@@ -59,5 +75,7 @@ export async function proxy(request: NextRequest) {
 
 // Apply proxy to all routes except Next static assets & common files
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  // Important: exclude all Next.js internal paths. In dev, Next uses routes like
+  // `/_next/webpack-hmr` which must not be intercepted by auth redirects.
+  matcher: ["/((?!api|_next|favicon.ico|robots.txt|sitemap.xml).*)"],
 };

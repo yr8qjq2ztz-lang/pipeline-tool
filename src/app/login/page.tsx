@@ -5,13 +5,18 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
-import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 export default function LoginPage() {
   const router = useRouter();
 
-  // Client-only: safe to create the browser client directly.
   const supabase = supabaseBrowser();
+
+  function getRedirectTo() {
+    if (typeof window === "undefined") return "/pipeline";
+    const raw = new URLSearchParams(window.location.search).get("redirectedFrom") ?? "";
+    if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
+    return "/pipeline";
+  }
 
   const [email, setEmail] = useState(() => {
     try {
@@ -33,29 +38,19 @@ export default function LoginPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [lastAuthEvent, setLastAuthEvent] = useState<AuthChangeEvent | null>(null);
-  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
 
-  // Wait for Supabase auth to initialize before doing anything clever.
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
-      setLastAuthEvent(event);
-      setSessionEmail(session?.user?.email ?? null);
-      if (event === "INITIAL_SESSION") {
-        setChecking(false);
-        if (session) router.replace("/pipeline");
-      }
-      if (event === "SIGNED_IN") {
-        setChecking(false);
-        if (session) router.replace("/pipeline");
-      }
+    const redirectTo = getRedirectTo();
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) router.replace(redirectTo);
     });
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSessionEmail(data.session?.user?.email ?? null);
-      setChecking(false);
-      if (data.session) router.replace("/pipeline");
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (data.session) router.replace(redirectTo);
+      })
+      .finally(() => setChecking(false));
 
     return () => sub.subscription.unsubscribe();
   }, [router, supabase]);
@@ -64,12 +59,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setInfo(null);
-    setSubmitting(true);
-
-    if (!supabase) {
-      setError("Authentication not initialized. Please refresh.");
-      return;
-    }
 
     // Validation
     if (!email.trim()) {
@@ -85,50 +74,48 @@ export default function LoginPage() {
       return;
     }
 
+    setSubmitting(true);
     try {
+      const redirectTo = getRedirectTo();
       if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
           setError(error.message || "Sign in failed");
           return;
         }
-        
-        // Handle remember me
-        try {
-          if (rememberMe) {
-            localStorage.setItem("rememberMe_email", email);
-          } else {
-            localStorage.removeItem("rememberMe_email");
-          }
-        } catch {
-          // localStorage might be disabled
-        }
-        
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (!sessionData.session) {
-          setError("Signed in but no session found. Check your email confirmation or try again.");
+
+        // If email confirmation is required (or cookies/storage are blocked), session can be null.
+        if (!data.session) {
+          setError(
+            "Signed in but no session was returned. If email confirmation is enabled, confirm your email first. Otherwise check that third-party cookies/storage aren’t blocked.",
+          );
           return;
         }
 
+        try {
+          if (rememberMe) localStorage.setItem("rememberMe_email", email);
+          else localStorage.removeItem("rememberMe_email");
+        } catch {
+          // localStorage might be disabled
+        }
+
         setInfo("Signed in. Redirecting…");
-        router.replace("/pipeline");
+        router.replace(redirectTo);
         return;
       }
 
-      // signup
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) {
         setError(error.message || "Sign up failed");
         return;
       }
 
-      // If email confirmation is required, session can be null.
       if (!data.session) {
         setInfo("Account created. Check your email to confirm, then come back and sign in.");
         return;
       }
 
-      router.replace("/pipeline");
+      router.replace(redirectTo);
     } catch (err) {
       if (process.env.NODE_ENV !== "production") {
         console.error("Auth error:", err);
@@ -144,13 +131,18 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold">
-          {mode === "login" ? "Sign in" : "Create account"}
-        </h1>
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {mode === "login" ? "Sign in" : "Create account"}
+          </h1>
+          <p className="mt-1 text-sm text-slate-600">Use your work email and password.</p>
+        </div>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <label className="text-sm" htmlFor="login-email">Email</label>
+            <label className="text-sm" htmlFor="login-email">
+              Email
+            </label>
             <input
               className="mt-1 w-full rounded-lg border px-3 py-2"
               value={email}
@@ -158,12 +150,15 @@ export default function LoginPage() {
               type="email"
               id="login-email"
               name="email"
+              autoComplete="email"
               required
             />
           </div>
 
           <div>
-            <label className="text-sm" htmlFor="login-password">Password</label>
+            <label className="text-sm" htmlFor="login-password">
+              Password
+            </label>
             <input
               className="mt-1 w-full rounded-lg border px-3 py-2"
               value={password}
@@ -171,6 +166,7 @@ export default function LoginPage() {
               type="password"
               id="login-password"
               name="password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
               required
             />
           </div>
@@ -191,44 +187,25 @@ export default function LoginPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           {info && <p className="text-sm">{info}</p>}
 
-          <button className="w-full rounded-lg bg-black text-white py-2" disabled={submitting}>
+          <button
+            className="w-full rounded-lg bg-black text-white py-2 disabled:opacity-60"
+            disabled={submitting}
+          >
             {mode === "login" ? "Sign in" : "Sign up"}
           </button>
         </form>
 
         <button
-          className="mt-4 text-sm underline"
-          onClick={() => setMode(mode === "login" ? "signup" : "login")}
+          className="mt-4 text-sm text-slate-700 hover:underline"
+          type="button"
+          onClick={() => {
+            setError(null);
+            setInfo(null);
+            setMode((m) => (m === "login" ? "signup" : "login"));
+          }}
         >
-          {mode === "login"
-            ? "Need an account? Sign up"
-            : "Already have an account? Sign in"}
+          {mode === "login" ? "Need an account? Sign up" : "Already have an account? Sign in"}
         </button>
-
-        <div className="mt-6 rounded-lg border bg-gray-50 p-3 text-xs text-gray-700">
-          <div>Auth event: {lastAuthEvent ?? "(none)"}</div>
-          <div>Session email: {sessionEmail ?? "(none)"}</div>
-          <button
-            className="mt-2 underline"
-            type="button"
-            onClick={async () => {
-              const { data } = await supabase.auth.getSession();
-              setSessionEmail(data.session?.user?.email ?? null);
-              setInfo(data.session ? "Session found." : "No session found.");
-            }}
-          >
-            Check session
-          </button>
-          {sessionEmail && (
-            <button
-              className="mt-2 ml-3 underline"
-              type="button"
-              onClick={() => router.replace("/pipeline")}
-            >
-              Continue to pipeline
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );

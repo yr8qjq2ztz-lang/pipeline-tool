@@ -715,6 +715,15 @@ export default function PipelinePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!editOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [editOpen]);
+
   async function getOrCreateAccountId(nameRaw: string): Promise<string> {
     const name = nameRaw.trim();
     if (!name) throw new Error("Account name is required.");
@@ -2904,8 +2913,8 @@ export default function PipelinePage() {
 
       {/* EDIT MODAL */}
       {editOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-6 shadow-lg text-slate-950 dark:text-slate-100">
+        <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="w-full max-w-2xl my-8 max-h-[calc(100vh-4rem)] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-6 shadow-lg text-slate-950 dark:text-slate-100">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Edit opportunity</h2>

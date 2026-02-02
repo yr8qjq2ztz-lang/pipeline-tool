@@ -30,6 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# local-only
+/logs/
+/.vscode/
+
 # env files (keep local secrets out of git)
 .env*
 !.env.example

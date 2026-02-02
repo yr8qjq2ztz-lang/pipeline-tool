@@ -75,9 +75,26 @@ export function supabaseBrowser() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) {
-    throw new Error(
-      "Supabase env vars missing: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."
+    const noopSub = { subscription: { unsubscribe() {} } };
+    const err = new Error(
+      "Supabase env vars missing: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
     );
+
+    const stub = {
+      auth: {
+        onAuthStateChange: () => ({ data: noopSub }),
+        getUser: async () => ({ data: { user: null }, error: err }),
+        getSession: async () => ({ data: { session: null }, error: err }),
+        signInWithPassword: async () => ({ data: { user: null, session: null }, error: err }),
+        signUp: async () => ({ data: { user: null, session: null }, error: err }),
+        signOut: async () => ({ error: err }),
+      },
+      from: () => {
+        throw err;
+      },
+    };
+
+    return stub as unknown as BrowserSupabaseClient;
   }
 
   if (browserClient) return browserClient;

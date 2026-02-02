@@ -1,0 +1,5 @@
+# Prevent uploading local-only files to Vercel deployments
+.vscode
+logs
+*.log
+*.tsbuildinfo
