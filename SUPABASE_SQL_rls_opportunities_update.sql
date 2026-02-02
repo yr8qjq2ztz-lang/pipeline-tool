@@ -26,6 +26,22 @@ using (true)
 with check (true);
 
 -- -----------------------------------------------------------------------------
+-- OPTION A2 (shared-team + allowlist, recommended if you use the auth allowlist):
+-- Allow UPDATE only for authenticated users whose email/domain is allowlisted.
+--
+-- Prerequisite:
+-- - Run SUPABASE_SQL_auth_before_user_created_domain_allowlist.sql
+-- - Run SUPABASE_SQL_rls_accounts_insert_allowed_domains.sql (defines public.is_allowed_app_user())
+--
+-- drop policy if exists opportunities_update_allowed_domains on public.opportunities;
+-- create policy opportunities_update_allowed_domains
+-- on public.opportunities
+-- for update
+-- to authenticated
+-- using (public.is_allowed_app_user())
+-- with check (public.is_allowed_app_user());
+
+-- -----------------------------------------------------------------------------
 -- OPTION B (recommended when you have ownership):
 -- Only allow updating rows where owner_user_id = auth.uid().
 --

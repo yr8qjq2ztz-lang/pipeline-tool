@@ -3,11 +3,12 @@
 ## Quick commands
 - `npm run dev`
 - `npm run lint`, `npm run typecheck`, `npm run build`
-- `npm run smoke` (runs a build + lightweight sanity checks)
+- `npm run smoke` (runs a production build + lightweight checks)
+- Windows “production-like” run: see `RUN_LOCAL_WINDOWS.md`
 
 ## Project shape
 - Next.js App Router (Next 16 / React 19) under `src/app/*`.
-- Supabase is the backend: Auth + Postgres tables (`opportunities` with joins to `accounts` and `branches`).
+- Supabase is the backend: Auth + Postgres tables (`opportunities` joins to `accounts` + optional `branches`).
 
 ## Where to change UI
 - Most Pipeline UX (board, table, create form, edit modal, “BNT/PENZ/Bapcor” sub-sections) lives in `src/app/pipeline/page.tsx`.
@@ -17,6 +18,15 @@
 - Client pages (e.g. `src/app/pipeline/page.tsx`, `src/app/analytics/page.tsx`) wait for `supabase.auth.onAuthStateChange(...)` and act only on `event === "INITIAL_SESSION"`; always unsubscribe in cleanup.
 - Server pages (e.g. `src/app/dashboard/page.tsx`) use `supabaseServer()` (cookie-backed) and `redirect("/login")` if `supabase.auth.getUser()` has no user.
 - `supabaseBrowser()` intentionally returns a safe stub during SSR/build to avoid prerender failures (see `src/lib/supabase/browser.ts`). Don’t “simplify” this.
+
+## Supabase RLS + schema scripts (how this repo manages DB changes)
+- DB changes are applied via idempotent scripts at repo root (`SUPABASE_SQL_*.sql`); see `SUPABASE_SCHEMA_CHECKLIST.md`.
+- Common RLS fixes:
+	- `SUPABASE_SQL_rls_opportunities_select.sql` (fixes: opportunities not loading when RLS enabled)
+	- `SUPABASE_SQL_rls_opportunities_insert.sql` (fixes: insert blocked on `public.opportunities`)
+	- `SUPABASE_SQL_rls_opportunities_update.sql` (fixes: edits silently not persisting / RLS update blocked)
+	- `SUPABASE_SQL_rls_accounts_insert_allowed_domains.sql` (fixes: insert blocked on `public.accounts`)
+- If you enable the audit trigger (`SUPABASE_SQL_opportunity_events_time_machine.sql`) and also enable RLS on `public.opportunity_events`, run `SUPABASE_SQL_rls_opportunity_events.sql` so the trigger can insert audit rows.
 
 ## Database schema: optional columns are normal
 - Schema guidance and SQL scripts live at repo root: `SUPABASE_SCHEMA_CHECKLIST.md`, `SUPABASE_SQL_*.sql`.

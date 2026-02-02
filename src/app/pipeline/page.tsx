@@ -76,6 +76,11 @@ const HOW_WE_WIN_OPTIONS = [
   "Price / value for money (including deals)",
   "Trust / credibility",
   "Recommendation",
+  "Brand Recognition",
+  "Product Quality",
+  "Service",
+  "Running Cost Reduction",
+  "Downtime Reduction",
 ] as const;
 
 const BNT_CATEGORY_OPTIONS = [
@@ -283,6 +288,27 @@ export default function PipelinePage() {
       .map((x) => x.trim())
       .filter(Boolean);
   }
+
+  const howWeWinOptions = useMemo(() => {
+    const base = [...HOW_WE_WIN_OPTIONS];
+    const baseSet = new Set(base.map((x) => x.toLowerCase()));
+    const extras = new Set<string>();
+
+    for (const r of rows) {
+      for (const v of parseMultiValue(r.how_we_win)) {
+        if (!baseSet.has(v.toLowerCase())) extras.add(v);
+      }
+    }
+
+    for (const v of [...createHowWeWin, ...editHowWeWin]) {
+      const t = String(v ?? "").trim();
+      if (!t) continue;
+      if (!baseSet.has(t.toLowerCase())) extras.add(t);
+    }
+
+    const extraList = Array.from(extras).sort((a, b) => a.localeCompare(b));
+    return [...base, ...extraList];
+  }, [rows, createHowWeWin, editHowWeWin]);
 
   function getOpportunitySignals(o: OpportunityRow): string[] {
     const out: string[] = [];
@@ -2398,7 +2424,7 @@ export default function PipelinePage() {
                 </summary>
                 <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
                   <div className="grid gap-2">
-                    {HOW_WE_WIN_OPTIONS.map((opt) => (
+                    {howWeWinOptions.map((opt) => (
                       <label key={opt} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
                         <input
                           type="checkbox"
@@ -3110,7 +3136,7 @@ export default function PipelinePage() {
                   </summary>
                   <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
                     <div className="grid gap-2">
-                      {HOW_WE_WIN_OPTIONS.map((opt) => (
+                      {howWeWinOptions.map((opt) => (
                         <label key={opt} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
                           <input
                             type="checkbox"

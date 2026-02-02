@@ -82,3 +82,22 @@ Run these in the Supabase **SQL Editor** (in any order). Each script is idempote
 - Allow creating accounts during opportunity creation
   - Script: `SUPABASE_SQL_rls_accounts_insert_allowed_domains.sql`
   - Fixes: `new row violates row-level security policy for table "accounts"`
+
+- Allow creating opportunities when RLS is enabled
+  - Script: `SUPABASE_SQL_rls_opportunities_insert.sql`
+  - Fixes: `new row violates row-level security policy for table "opportunities"`
+  - Note: script includes an optional allowlist-gated variant (requires `public.is_allowed_app_user()`)
+
+- Allow loading opportunities when RLS is enabled
+  - Script: `SUPABASE_SQL_rls_opportunities_select.sql`
+  - Fixes: pipeline/dashboard pages failing to load opportunities due to RLS
+  - Note: script includes an optional allowlist-gated variant (requires `public.is_allowed_app_user()`)
+
+- Allow editing opportunities when RLS is enabled
+  - Script: `SUPABASE_SQL_rls_opportunities_update.sql`
+  - Fixes: silent/no-op updates (or RLS errors) when saving edits
+  - Note: script includes an optional allowlist-gated variant (requires `public.is_allowed_app_user()`)
+
+- Pipeline Time Machine audit log (optional)
+  - Script: `SUPABASE_SQL_opportunity_events_time_machine.sql`
+  - If RLS is enabled on `public.opportunity_events`, also run: `SUPABASE_SQL_rls_opportunity_events.sql`
