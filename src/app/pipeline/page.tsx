@@ -272,6 +272,8 @@ export default function PipelinePage() {
   const editHowWeWinDetailsRef = useRef<HTMLDetailsElement | null>(null);
   const createBapcorRebateDetailsRef = useRef<HTMLDetailsElement | null>(null);
   const editBapcorRebateDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const createBatterySolutionDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const editBatterySolutionDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
   function toggleMultiSelect(setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) {
     setter((prev) => (prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]));
@@ -853,14 +855,27 @@ export default function PipelinePage() {
       let { error } = await supabase.from("opportunities").insert(insertWithOwner);
 
       if (error) {
-        const msg = error.message || "Failed to create opportunity";
+        let msg = error.message || "Failed to create opportunity";
 
-        const missingOwner =
-          /owner_user_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
+        const missingOwner = /owner_user_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
         if (missingOwner && currentUserId) {
           console.warn("owner_user_id column missing; creating opportunity without owner assignment.");
           const retry = await supabase.from("opportunities").insert(insertBase);
           error = retry.error;
+          msg = error?.message || msg;
+        }
+
+        const missingBapcorInvite =
+          /bapcor_rebate_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
+        if (missingBapcorInvite) {
+          console.warn(
+            "bapcor_rebate_invite column missing; creating opportunity without rebate invite who-to-bring-in."
+          );
+          const retryPayload = { ...(insertWithOwner as Record<string, unknown>) };
+          delete retryPayload.bapcor_rebate_invite;
+          const retry = await supabase.from("opportunities").insert(retryPayload);
+          error = retry.error;
+          msg = error?.message || msg;
         }
 
         if (!error) {
@@ -918,7 +933,7 @@ export default function PipelinePage() {
         }
         if (/bapcor_rebate_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
-            "Bapcor Rebate invite field isn't in your database yet. Add a nullable text column on opportunities: bapcor_rebate_invite."
+            "Bapcor Rebate invite field isn't in your database yet. Add a nullable text column on opportunities: bapcor_rebate_invite (or run SUPABASE_SQL_bapcor_rebate.sql)."
           );
         }
           throw new Error(error.message || msg);
@@ -1187,7 +1202,7 @@ export default function PipelinePage() {
       let { error } = await supabase.from("opportunities").update(updateWithOwner).eq("id", editId);
 
       if (error) {
-        const msg = error.message || "Failed to update opportunity";
+        let msg = error.message || "Failed to update opportunity";
         if (/sales_person/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg)) {
           throw new Error(
             "Sales person field isn't in your database yet. Add a nullable text column on opportunities: sales_person."
@@ -1253,12 +1268,24 @@ export default function PipelinePage() {
           delete retryUpdate.next_action_completed_at;
           const retry = await supabase.from("opportunities").update(retryUpdate).eq("id", editId);
           error = retry.error;
+          msg = error?.message || msg;
+        }
+
+        const missingBapcorInvite =
+          /bapcor_rebate_invite/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
+        if (missingBapcorInvite) {
+          const retryUpdate = { ...(updateWithOwner as Record<string, unknown>) };
+          delete retryUpdate.bapcor_rebate_invite;
+          const retry = await supabase.from("opportunities").update(retryUpdate).eq("id", editId);
+          error = retry.error;
+          msg = error?.message || msg;
         }
 
         const missingOwner = /owner_user_id/i.test(msg) && /(does not exist|unknown column|column)/i.test(msg);
         if (missingOwner && ownerFieldAvailable) {
           const retry = await supabase.from("opportunities").update(updateBase).eq("id", editId);
           error = retry.error;
+          msg = error?.message || msg;
         }
 
         if (error) throw new Error(error.message || msg);
@@ -2253,21 +2280,52 @@ export default function PipelinePage() {
 
             <div>
               <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Battery Solution</label>
-              <select
-                className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors appearance-none cursor-pointer"
-                value={createBatterySolution}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setCreateBatterySolution(next);
-                }}
-              >
-                <option value="">(optional)</option>
-                {BATTERY_SOLUTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+              <details ref={createBatterySolutionDetailsRef} className="mt-1 relative">
+                <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
+                  {createBatterySolution.trim() ? createBatterySolution.trim() : "(optional)"}
+                </summary>
+                <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
+                  <div className="grid gap-2">
+                    <label className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={!createBatterySolution.trim()}
+                        onChange={(e) => {
+                          if (e.target.checked) setCreateBatterySolution("");
+                        }}
+                      />
+                      <span>(optional / none)</span>
+                    </label>
+
+                    {BATTERY_SOLUTIONS.map((s) => (
+                      <label key={s} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={createBatterySolution.trim() === s}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setCreateBatterySolution(checked ? s : "");
+                          }}
+                        />
+                        <span>{s}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        createBatterySolutionDetailsRef.current?.removeAttribute("open");
+                      }}
+                      className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              </details>
             </div>
 
             <div className="md:col-span-2">
@@ -2498,21 +2556,23 @@ export default function PipelinePage() {
                     ))}
                   </div>
 
-                  <div className="mt-3">
-                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                      Who to bring in?
-                    </label>
-                    <input
-                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
-                      value={createBapcorRebateInvite}
-                      onChange={(e) => setCreateBapcorRebateInvite(e.target.value)}
-                      placeholder="Name(s)…"
-                      disabled={!['yes', 'unsure'].includes(createOpportunityForBapcorRebate.trim().toLowerCase())}
-                    />
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                      Optional (enabled for YES/UNSURE).
-                    </p>
-                  </div>
+                  {(function () {
+                    const v = createOpportunityForBapcorRebate.trim().toLowerCase();
+                    return v === "yes" || v === "unsure";
+                  })() && (
+                    <div className="mt-3">
+                      <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        Who to bring in?
+                      </label>
+                      <input
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                        value={createBapcorRebateInvite}
+                        onChange={(e) => setCreateBapcorRebateInvite(e.target.value)}
+                        placeholder="Name(s)…"
+                      />
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Optional.</p>
+                    </div>
+                  )}
 
                   <div className="mt-3 flex justify-end">
                     <button
@@ -2930,21 +2990,52 @@ export default function PipelinePage() {
 
               <div>
                 <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Battery Solution</label>
-                <select
-                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors appearance-none cursor-pointer"
-                  value={editBatterySolution}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setEditBatterySolution(next);
-                  }}
-                >
-                  <option value="">(optional)</option>
-                  {BATTERY_SOLUTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
+                <details ref={editBatterySolutionDetailsRef} className="mt-1 relative">
+                  <summary className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors cursor-pointer">
+                    {editBatterySolution.trim() ? editBatterySolution.trim() : "(optional)"}
+                  </summary>
+                  <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-lg">
+                    <div className="grid gap-2">
+                      <label className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={!editBatterySolution.trim()}
+                          onChange={(e) => {
+                            if (e.target.checked) setEditBatterySolution("");
+                          }}
+                        />
+                        <span>(optional / none)</span>
+                      </label>
+
+                      {BATTERY_SOLUTIONS.map((s) => (
+                        <label key={s} className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={editBatterySolution.trim() === s}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setEditBatterySolution(checked ? s : "");
+                            }}
+                          />
+                          <span>{s}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          editBatterySolutionDetailsRef.current?.removeAttribute("open");
+                        }}
+                        className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-all shadow-sm"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </details>
               </div>
 
               <div className="md:col-span-2">
@@ -3175,21 +3266,23 @@ export default function PipelinePage() {
                       ))}
                     </div>
 
-                    <div className="mt-3">
-                      <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                        Who to bring in?
-                      </label>
-                      <input
-                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
-                        value={editBapcorRebateInvite}
-                        onChange={(e) => setEditBapcorRebateInvite(e.target.value)}
-                        placeholder="Name(s)…"
-                        disabled={!['yes', 'unsure'].includes(editOpportunityForBapcorRebate.trim().toLowerCase())}
-                      />
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                        Optional (enabled for YES/UNSURE).
-                      </p>
-                    </div>
+                    {(function () {
+                      const v = editOpportunityForBapcorRebate.trim().toLowerCase();
+                      return v === "yes" || v === "unsure";
+                    })() && (
+                      <div className="mt-3">
+                        <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                          Who to bring in?
+                        </label>
+                        <input
+                          className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                          value={editBapcorRebateInvite}
+                          onChange={(e) => setEditBapcorRebateInvite(e.target.value)}
+                          placeholder="Name(s)…"
+                        />
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Optional.</p>
+                      </div>
+                    )}
 
                     <div className="mt-3 flex justify-end">
                       <button
