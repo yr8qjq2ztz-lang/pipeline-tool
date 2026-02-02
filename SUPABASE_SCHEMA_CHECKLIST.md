@@ -24,6 +24,10 @@ Run these in the Supabase **SQL Editor** (in any order). Each script is idempote
   - Script: `SUPABASE_SQL_bnt_invite.sql`
   - Adds: `opportunities.bnt_invite` (text)
 
+- How we win
+  - Script: `SUPABASE_SQL_how_we_win.sql`
+  - Adds: `opportunities.how_we_win` (text)
+
 - Vehicle fields (only used for “Commercial Vehicles and Fleets”)
   - Script: `SUPABASE_SQL_vehicle_fields.sql`
   - Adds: `opportunities.vehicle_brand`, `opportunities.vehicle_model` (text)
